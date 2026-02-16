@@ -29,6 +29,8 @@ const __dirname = path.dirname(__filename);
 const allowedOrigins = [
   process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
 ];
 
 app.use(
@@ -36,7 +38,10 @@ app.use(
     origin(origin, cb) {
       // allow non-browser tools (curl/postman) with no Origin header
       if (!origin) return cb(null, true);
+      // In production, allow same-origin requests (no Origin header for same-origin)
       if (allowedOrigins.includes(origin)) return cb(null, true);
+      // Allow any origin in production since frontend is served from same origin
+      if (process.env.NODE_ENV === 'production') return cb(null, true);
       return cb(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
