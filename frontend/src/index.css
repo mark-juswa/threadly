@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+
+body {
+  font-family: 'Poppins', sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 3px;
+}
+
+/* Contenteditable focus */
+[contenteditable]:focus {
+  outline: none;
+}
+
+/* Search highlights */
+.search-highlight {
+  background-color: #facc15;
+  color: black;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.search-highlight.active {
+  background-color: #f97316;
+  color: white;
+  outline: 2px solid #f97316;
+}
+
+/* Editor styles (Notion-like) */
+#editor h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+  padding-top: 1rem;
+}
+
+#editor h2 {
+  font-size: 1.875rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+  padding-top: 0.8rem;
+}
+
+#editor h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+  padding-top: 0.6rem;
+}
+
+#editor ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+#editor ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+#editor blockquote {
+  border-left: 4px solid #4b5563;
+  padding-left: 1rem;
+  color: #9ca3af;
+  font-style: italic;
+  margin: 1rem 0;
+}
+
+#editor pre {
+  background-color: #262626;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-family: monospace;
+  color: #e5e7eb;
+  margin: 0.5rem 0;
+  border: 1px solid #404040;
+  white-space: pre-wrap;
+}
+
+#editor img {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+#editor img:hover {
+  opacity: 0.9;
+}
+
+/* Floating toolbar animation */
+.floating-toolbar {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.floating-toolbar.visible {
+  opacity: 1;
+  transform: translate(-50%, -100%);
+  margin-top: -12px;
+  pointer-events: auto;
+}

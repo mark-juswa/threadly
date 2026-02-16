@@ -1,0 +1,87 @@
+import 'dotenv/config'; // Load env variables FIRST (before other imports)
+import express from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import session from 'express-session';
+
+// Import passport config AFTER dotenv is loaded
+import './config/passport.js'; // This executes passport.use()
+import passport from 'passport';
+
+import noteRoutes from './routes/noteRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
+import { connectDB } from './config/db.js';
+import { errorHandler } from './middleware/errorMiddleware.js';
+import ratelimiter from './middleware/rateLimiter.js';
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Middleware
+
+// CORS (allow the Vite dev server + common dev tooling)
+const allowedOrigins = [
+  process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+
+app.use(
+  cors({
+    origin(origin, cb) {
+      // allow non-browser tools (curl/postman) with no Origin header
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+
+// Preflight: match all OPTIONS requests
+app.options(/.*/, cors());
+
+app.use(express.json());
+app.use(cookieParser()); // Required for JWT in cookies
+
+// Session middleware (required for Passport)
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'your-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  })
+);
+
+// Initialize Passport AFTER session
+app.use(passport.initialize());
+app.use(passport.session());
+
+//app.use(ratelimiter);
+
+// Note: Static file serving removed - images are now served from Cloudinary CDN
+
+// Routes
+app.use('/api/auth', authRoutes); // OAuth routes
+app.use('/api/users', userRoutes);
+app.use('/api/notes', noteRoutes);
+app.use('/api/upload', uploadRoutes);
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+// Connect to DB and start server
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server is running on PORT:${PORT}`);
+    console.log(`Google OAuth: ${process.env.GOOGLE_CLIENT_ID ? 'Configured' : '⚠️  Not configured'}`);
+  });
+});
