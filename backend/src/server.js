@@ -1,11 +1,12 @@
-import 'dotenv/config'; // Load env variables FIRST (before other imports)
+import 'dotenv/config'; 
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Import passport config AFTER dotenv is loaded
-import './config/passport.js'; // This executes passport.use()
+import './config/passport.js'; 
 import passport from 'passport';
 
 import noteRoutes from './routes/noteRoutes.js';
@@ -18,6 +19,9 @@ import ratelimiter from './middleware/rateLimiter.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Middleware
 
@@ -77,6 +81,29 @@ app.use('/api/upload', uploadRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
+
+
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+
+  app.get(/.*/, (req, res) => {
+    res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
+  });
+} else {
+  // In development, return helpful 404 for non-API routes
+  app.use((req, res, next) => {
+    if (!req.path.startsWith('/api') && req.path !== '/health') {
+      return res.status(404).json({ 
+        error: 'Not Found',
+        message: `Route ${req.path} not found. In development, use http://localhost:5173 for the frontend.`,
+        tip: 'API endpoints are available at /api/*'
+      });
+    }
+    next();
+  });
+}
+
+
 
 // Connect to DB and start server
 connectDB().then(() => {
