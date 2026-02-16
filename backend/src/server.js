@@ -79,14 +79,11 @@ app.use('/api/users', userRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/upload', uploadRoutes);
 
-// Error handler (must be last)
-app.use(errorHandler);
-
-
+// Serve static files in production (must be before error handler)
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
-  app.get(/.*/, (req, res) => {
+  app.get("*", (req, res) => {
     res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
   });
 } else {
@@ -102,6 +99,9 @@ if (process.env.NODE_ENV === "production") {
     next();
   });
 }
+
+// Error handler (must be last)
+app.use(errorHandler);
 
 
 
