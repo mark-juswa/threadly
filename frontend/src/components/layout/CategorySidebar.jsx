@@ -202,7 +202,7 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
       {/* Header */}
       <div className="flex items-center h-20 px-6 border-b border-gray-800">
         <h1 className="text-xl font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-500">
-          THREADLY
+          THREADIFY
         </h1>
       </div>
 
