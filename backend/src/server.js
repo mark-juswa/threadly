@@ -76,7 +76,6 @@ app.use(passport.session());
 
 //app.use(ratelimiter);
 
-// Note: Static file serving removed - images are now served from Cloudinary CDN
 
 // Routes
 app.use('/api/auth', authRoutes); // OAuth routes
@@ -84,16 +83,14 @@ app.use('/api/users', userRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/upload', uploadRoutes);
 
-// Serve static files in production (must be before error handler)
+
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
-  // Express 5 requires named wildcard parameter
   app.get("/{*splat}", (req, res) => {
     res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
   });
 } else {
-  // In development, return helpful 404 for non-API routes
   app.use((req, res, next) => {
     if (!req.path.startsWith('/api') && req.path !== '/health') {
       return res.status(404).json({ 
