@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import TopicSidebar from './TopicSidebar';
 import CategorySidebar from './CategorySidebar';
 import Header from './Header';
 import RichTextEditor from '../editor/RichTextEditor';
 import FloatingToolbar from '../editor/FloatingToolbar';
+import EditorOutlineSidebar from '../editor/EditorOutlineSidebar';
 import ImageModal from '../modals/ImageModal';
 import ModalOverlay from '../modals/ModalOverlay';
 import NoteModal from '../modals/NoteModal';
@@ -12,6 +13,7 @@ import { useNotes } from '../../hooks/useNotes';
 
 const MainApp = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const editorRef = useRef(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createModalType, setCreateModalType] = useState('topic');
   const [createModalData, setCreateModalData] = useState(null);
@@ -142,8 +144,14 @@ const MainApp = () => {
       <main className="flex-1 bg-[#151515] flex flex-col relative min-w-0">
         <Header toggleMobileMenu={toggleMobileMenu} />
         
-        <div className="relative flex-1 overflow-hidden">
-          <RichTextEditor />
+        <div className="relative flex-1 flex overflow-hidden">
+          {/* Editor Area */}
+          <div className="flex-1 relative overflow-hidden">
+            <RichTextEditor ref={editorRef} />
+          </div>
+          
+          {/* Right Contextual Sidebar - Page Outline */}
+          <EditorOutlineSidebar editorRef={editorRef} />
         </div>
 
         <FloatingToolbar />

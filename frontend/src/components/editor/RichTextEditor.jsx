@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import { uploadService } from '../../api/uploadService';
 
-const RichTextEditor = () => {
+const RichTextEditor = forwardRef((props, ref) => {
   const editorRef = useRef(null);
   const { currentNote, updateNote } = useNotes();
+
+  // Expose the editor ref to parent components
+  useImperativeHandle(ref, () => ({
+    get current() {
+      return editorRef.current;
+    }
+  }));
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef(null);
 
@@ -137,6 +144,8 @@ const RichTextEditor = () => {
       )}
     </>
   );
-};
+});
+
+RichTextEditor.displayName = 'RichTextEditor';
 
 export default RichTextEditor;
