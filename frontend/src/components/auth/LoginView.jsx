@@ -70,7 +70,7 @@ const LoginView = () => {
       <div className="max-w-md w-full bg-[#1c1c1c] p-8 rounded-2xl border border-gray-800 shadow-2xl text-center">
         {/* Icon */}
         <div className="flex items-center justify-center w-16 h-16 mx-auto mb-6 shadow-lg bg-gradient-to-br from-green-500 to-emerald-700 rounded-xl shadow-green-500/20">
-          <img src="/Logo3.png" className="w-8 h-8 text-white"  />
+          <img src="/Logo3.png" className="w-16 h-16 text-white rounded-xl"  />
           
         </div>
 
