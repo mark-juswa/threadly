@@ -1,7 +1,14 @@
 import axios from 'axios';
 
+// In production, use relative URL (same origin). In dev, use localhost:5000
+const getBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (import.meta.env.PROD) return ''; // Empty string = relative URL (same origin)
+  return 'http://localhost:5000'; // Development fallback
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+  baseURL: getBaseURL(),
   withCredentials: true, // Important: Send cookies with requests
   headers: {
     'Content-Type': 'application/json',

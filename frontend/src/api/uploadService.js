@@ -47,7 +47,8 @@ export const uploadService = {
     if (imageUrl.startsWith('http')) return imageUrl;
     
     // Fallback for old local URLs (backward compatibility)
-    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    // In production, use relative URL (same origin). In dev, use localhost:5000
+    const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:5000');
     return `${baseURL}${imageUrl}`;
   },
 };
