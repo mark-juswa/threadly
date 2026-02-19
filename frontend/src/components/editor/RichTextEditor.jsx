@@ -5,6 +5,10 @@ import { uploadService } from '../../api/uploadService';
 const RichTextEditor = forwardRef((props, ref) => {
   const editorRef = useRef(null);
   const { currentNote, updateNote } = useNotes();
+  
+  // Track the current note ID to detect actual note changes
+  const currentNoteIdRef = useRef(null);
+  const isAutoSavingRef = useRef(false);
 
   // Sync the forwarded ref with our internal ref
   useEffect(() => {
@@ -15,18 +19,42 @@ const RichTextEditor = forwardRef((props, ref) => {
         ref.current = editorRef.current;
       }
     }
-  }, [ref, currentNote]); // Re-sync when note changes to ensure ref is updated
+  }, [ref, currentNote?._id]); // Only re-sync when note ID changes
+  
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef(null);
 
-  // Load current note content
+  // Load current note content - ONLY when note ID changes
   useEffect(() => {
-    if (editorRef.current && currentNote) {
-      editorRef.current.innerHTML = currentNote.content || '';
-    } else if (editorRef.current) {
-      editorRef.current.innerHTML = '';
+    const noteId = currentNote?._id || null;
+    const previousNoteId = currentNoteIdRef.current;
+    
+    // Only update content if the note ID actually changed
+    if (noteId !== previousNoteId) {
+      // Clear any pending auto-save for the previous note
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      
+      currentNoteIdRef.current = noteId;
+      
+      if (editorRef.current && currentNote) {
+        editorRef.current.innerHTML = currentNote.content || '';
+      } else if (editorRef.current) {
+        editorRef.current.innerHTML = '';
+      }
     }
-  }, [currentNote]);
+  }, [currentNote?._id, currentNote?.content]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Auto-save on content change (debounced)
   const handleContentChange = () => {
@@ -39,12 +67,17 @@ const RichTextEditor = forwardRef((props, ref) => {
 
     // Set new timeout for auto-save
     saveTimeoutRef.current = setTimeout(async () => {
-      const content = editorRef.current.innerHTML;
+      const content = editorRef.current?.innerHTML;
+      if (!content && content !== '') return; // Safety check
+      
+      isAutoSavingRef.current = true;
       setIsSaving(true);
       
-      await updateNote(currentNote._id, { content });
+      // Use skipRefresh to prevent re-renders and cursor reset
+      await updateNote(currentNote._id, { content }, { skipRefresh: true });
       
       setIsSaving(false);
+      isAutoSavingRef.current = false;
     }, 1000); // Save after 1 second of no typing
   };
 

@@ -240,13 +240,23 @@ export const NoteProvider = ({ children }) => {
     }
   };
 
-  const updateNote = async (noteId, noteData) => {
+  const updateNote = async (noteId, noteData, options = {}) => {
+    const { skipRefresh = false } = options;
     try {
       const updatedNote = await noteService.updateNote(noteId, noteData);
-      await fetchAllNotes();
-      if (currentNote?._id === noteId) {
+      
+      // Skip full refresh for content-only updates (auto-save)
+      // This prevents cursor reset and unnecessary re-renders
+      if (!skipRefresh) {
+        await fetchAllNotes();
+      }
+      
+      // Only update currentNote state if we're not skipping refresh
+      // For auto-save, we don't want to trigger re-renders
+      if (currentNote?._id === noteId && !skipRefresh) {
         setCurrentNote(updatedNote);
       }
+      
       return { success: true, note: updatedNote };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to update note';
