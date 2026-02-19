@@ -81,6 +81,18 @@ const NoteModal = ({ type = 'note', mode = 'create', onClose, data = null }) => 
           categoryId: data.categoryId,
           topicId: currentTopic._id,
         });
+      } else if (type === 'subgroup') {
+        if (!currentTopic || !data?.categoryId || !data?.parentGroupId) {
+          setError('Invalid context for subgroup creation');
+          setLoading(false);
+          return;
+        }
+        result = await createGroup({
+          name,
+          categoryId: data.categoryId,
+          topicId: currentTopic._id,
+          parentGroupId: data.parentGroupId,
+        });
       }
 
       if (result.success) {
@@ -100,6 +112,7 @@ const NoteModal = ({ type = 'note', mode = 'create', onClose, data = null }) => 
     if (type === 'category') return 'Create Category';
     if (type === 'note') return 'Create Note';
     if (type === 'group') return 'Create Group';
+    if (type === 'subgroup') return 'Create Subgroup';
     return 'Create';
   };
 
@@ -108,6 +121,7 @@ const NoteModal = ({ type = 'note', mode = 'create', onClose, data = null }) => 
     if (type === 'category') return 'Category Name (e.g., Finance)';
     if (type === 'note') return 'Note Title';
     if (type === 'group') return 'Group Name';
+    if (type === 'subgroup') return 'Subgroup Name';
     return 'Name';
   };
 

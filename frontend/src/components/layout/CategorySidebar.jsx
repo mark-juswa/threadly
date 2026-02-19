@@ -2,6 +2,120 @@ import { useState } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import UserProfile from './UserProfile';
 
+// Recursive GroupItem component for rendering nested groups
+const GroupItem = ({
+  group,
+  categoryId,
+  depth,
+  currentNote,
+  draggedNote,
+  collapsedGroups,
+  searchQuery,
+  isDropTarget,
+  toggleGroupCollapse,
+  handleGroupContextMenu,
+  handleDragOver,
+  handleDragEnterGroup,
+  handleDragLeave,
+  handleDropOnGroup,
+  handleDragStart,
+  handleDragEnd,
+  handleNoteClick,
+  handleSubtopicContextMenu,
+}) => {
+  const marginLeft = depth > 0 ? `${depth * 8}px` : '0';
+  
+  return (
+    <div 
+      className={`mb-2 rounded-md transition ${
+        isDropTarget('group', group._id) ? 'ring-2 ring-blue-500 bg-blue-500/10' : ''
+      }`}
+      style={{ marginLeft }}
+      onDragOver={handleDragOver}
+      onDragEnter={(e) => handleDragEnterGroup(e, group._id, categoryId)}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => handleDropOnGroup(e, group._id, categoryId)}
+    >
+      {/* Group Header */}
+      <div 
+        onClick={() => toggleGroupCollapse(group._id)}
+        onContextMenu={(e) => handleGroupContextMenu(e, group)}
+        className="flex items-center gap-1 px-3 py-1 text-xs tracking-wider text-gray-500 uppercase transition cursor-pointer select-none hover:text-gray-400 group/header"
+      >
+        <svg
+          className={`w-2.5 h-2.5 transition-transform duration-200 ${
+            collapsedGroups[group._id] ? '-rotate-90' : ''
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+        <span>{group.name}</span>
+        {/* Visual indicator for nested groups */}
+        {depth > 0 && (
+          <span className="ml-1 text-gray-600 text-[10px]">↳</span>
+        )}
+      </div>
+      
+      {/* Group Content - Notes and Subgroups (auto-expand when searching) */}
+      {(!collapsedGroups[group._id] || searchQuery) && (
+        <>
+          {/* Group Notes */}
+          {group.notes?.map((note) => {
+            const isActive = currentNote?._id === note._id;
+            const isDragging = draggedNote?._id === note._id;
+            return (
+              <div
+                key={note._id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, note)}
+                onDragEnd={handleDragEnd}
+                onClick={() => handleNoteClick(note)}
+                onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
+                className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ml-2 ${
+                  isActive 
+                    ? 'border border-gray-700 hover:border-gray-500' 
+                    : 'hover:bg-[#222225]'
+                } ${isDragging ? 'opacity-50' : ''}`}
+              >
+                {isActive && <div className="w-2 h-2 mr-2 border-2 border-blue-500 rounded-full" />}
+                <span className="truncate searchable-text">{note.title}</span>
+              </div>
+            );
+          })}
+          
+          {/* Nested Subgroups - Recursive rendering */}
+          {group.subgroups?.map((subgroup) => (
+            <GroupItem
+              key={subgroup._id}
+              group={subgroup}
+              categoryId={categoryId}
+              depth={depth + 1}
+              currentNote={currentNote}
+              draggedNote={draggedNote}
+              collapsedGroups={collapsedGroups}
+              searchQuery={searchQuery}
+              isDropTarget={isDropTarget}
+              toggleGroupCollapse={toggleGroupCollapse}
+              handleGroupContextMenu={handleGroupContextMenu}
+              handleDragOver={handleDragOver}
+              handleDragEnterGroup={handleDragEnterGroup}
+              handleDragLeave={handleDragLeave}
+              handleDropOnGroup={handleDropOnGroup}
+              handleDragStart={handleDragStart}
+              handleDragEnd={handleDragEnd}
+              handleNoteClick={handleNoteClick}
+              handleSubtopicContextMenu={handleSubtopicContextMenu}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+};
+
 const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onCreateCategory }) => {
   const { topics, currentTopic, currentNote, setCurrentCategory, setCurrentNote, moveNote } = useNotes();
   const [searchQuery, setSearchQuery] = useState('');
@@ -148,6 +262,28 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
   // Filter categories, groups, and notes based on search
   const searchLower = searchQuery.toLowerCase();
   
+  // Recursive function to filter groups and their nested subgroups
+  const filterGroup = (group) => {
+    const groupMatches = group.name.toLowerCase().includes(searchLower);
+    const filteredGroupNotes = group.notes?.filter(note =>
+      note.title.toLowerCase().includes(searchLower)
+    ) || [];
+    
+    // Recursively filter subgroups
+    const filteredSubgroups = group.subgroups?.map(filterGroup).filter(Boolean) || [];
+    
+    // Include group if it matches, has matching notes, or has matching subgroups
+    if (groupMatches || filteredGroupNotes.length > 0 || filteredSubgroups.length > 0) {
+      return {
+        ...group,
+        notes: groupMatches ? group.notes : filteredGroupNotes,
+        subgroups: groupMatches ? group.subgroups : filteredSubgroups,
+        _matchedGroup: groupMatches
+      };
+    }
+    return null;
+  };
+  
   const getFilteredCategoryData = (category) => {
     const categoryMatches = category.name.toLowerCase().includes(searchLower);
     
@@ -156,23 +292,8 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
       note.title.toLowerCase().includes(searchLower)
     ) || [];
     
-    // Filter groups and their notes
-    const filteredGroups = category.groups?.map(group => {
-      const groupMatches = group.name.toLowerCase().includes(searchLower);
-      const filteredGroupNotes = group.notes?.filter(note =>
-        note.title.toLowerCase().includes(searchLower)
-      ) || [];
-      
-      // Include group if it matches or has matching notes
-      if (groupMatches || filteredGroupNotes.length > 0) {
-        return {
-          ...group,
-          notes: groupMatches ? group.notes : filteredGroupNotes, // Show all notes if group name matches
-          _matchedGroup: groupMatches
-        };
-      }
-      return null;
-    }).filter(Boolean) || [];
+    // Filter groups and their notes (including nested subgroups)
+    const filteredGroups = category.groups?.map(filterGroup).filter(Boolean) || [];
     
     // Include category if it matches, has matching notes, or has matching groups
     const hasMatchingContent = filteredNotes.length > 0 || filteredGroups.length > 0;
@@ -365,60 +486,29 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
                     );
                   })}
 
-                  {/* Groups */}
+                  {/* Groups - Recursive rendering for nested groups */}
                   {category.groups?.map((group) => (
-                    <div 
-                      key={group._id} 
-                      className={`mb-2 rounded-md transition ${
-                        isDropTarget('group', group._id) ? 'ring-2 ring-blue-500 bg-blue-500/10' : ''
-                      }`}
-                      onDragOver={handleDragOver}
-                      onDragEnter={(e) => handleDragEnterGroup(e, group._id, category._id)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDropOnGroup(e, group._id, category._id)}
-                    >
-                      {/* Group Header */}
-                      <div 
-                        onClick={() => toggleGroupCollapse(group._id)}
-                        onContextMenu={(e) => handleGroupContextMenu(e, group)}
-                        className="flex items-center gap-1 px-3 py-1 text-xs tracking-wider text-gray-500 uppercase transition cursor-pointer select-none hover:text-gray-400 group/header"
-                      >
-                        <svg
-                          className={`w-2.5 h-2.5 transition-transform duration-200 ${
-                            collapsedGroups[group._id] ? '-rotate-90' : ''
-                          }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                        <span>{group.name}</span>
-                      </div>
-                      {/* Group Notes - auto-expand when searching */}
-                      {(!collapsedGroups[group._id] || searchQuery) && group.notes?.map((note) => {
-                        const isActive = currentNote?._id === note._id;
-                        const isDragging = draggedNote?._id === note._id;
-                        return (
-                          <div
-                            key={note._id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, note)}
-                            onDragEnd={handleDragEnd}
-                            onClick={() => handleNoteClick(note)}
-                            onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
-                            className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ml-2 ${
-                              isActive 
-                                ? 'border border-gray-700 hover:border-gray-500' 
-                                : 'hover:bg-[#222225]'
-                            } ${isDragging ? 'opacity-50' : ''}`}
-                          >
-                            {isActive && <div className="w-2 h-2 mr-2 border-2 border-blue-500 rounded-full" />}
-                            <span className="truncate searchable-text">{note.title}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <GroupItem
+                      key={group._id}
+                      group={group}
+                      categoryId={category._id}
+                      depth={0}
+                      currentNote={currentNote}
+                      draggedNote={draggedNote}
+                      collapsedGroups={collapsedGroups}
+                      searchQuery={searchQuery}
+                      isDropTarget={isDropTarget}
+                      toggleGroupCollapse={toggleGroupCollapse}
+                      handleGroupContextMenu={handleGroupContextMenu}
+                      handleDragOver={handleDragOver}
+                      handleDragEnterGroup={handleDragEnterGroup}
+                      handleDragLeave={handleDragLeave}
+                      handleDropOnGroup={handleDropOnGroup}
+                      handleDragStart={handleDragStart}
+                      handleDragEnd={handleDragEnd}
+                      handleNoteClick={handleNoteClick}
+                      handleSubtopicContextMenu={handleSubtopicContextMenu}
+                    />
                   ))}
                 </div>
               )}

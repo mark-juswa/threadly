@@ -46,6 +46,15 @@ const MainApp = () => {
     setShowCreateModal(true);
   };
 
+  const handleCreateSubgroup = (parentGroup) => {
+    setCreateModalType('subgroup');
+    setCreateModalData({ 
+      categoryId: parentGroup.categoryId, 
+      parentGroupId: parentGroup._id 
+    });
+    setShowCreateModal(true);
+  };
+
   const handleCreateOrphanNote = () => {
     setCreateModalType('note');
     setCreateModalData({ categoryId: null }); // No category = orphan note
@@ -166,6 +175,7 @@ const MainApp = () => {
         hideContextMenu={hideContextMenu}
         onCreateNote={handleCreateNote}
         onCreateGroup={handleCreateGroup}
+        onCreateSubgroup={handleCreateSubgroup}
         onCreateCategory={handleCreateCategory}
         onCreateTopic={handleCreateTopic}
         onCreateOrphanNote={handleCreateOrphanNote}

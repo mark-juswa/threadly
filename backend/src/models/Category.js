@@ -17,11 +17,12 @@ const CategorySchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual: Find Groups inside this Category
+// Virtual: Find top-level Groups inside this Category (groups without a parent)
 CategorySchema.virtual('groups', {
   ref: 'Group',
   localField: '_id',
-  foreignField: 'categoryId'
+  foreignField: 'categoryId',
+  options: { match: { parentGroupId: null } }
 });
 
 // Virtual: Find Notes directly inside this Category (not in a group)

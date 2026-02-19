@@ -1,4 +1,4 @@
-const GroupContextMenu = ({ x, y, data, onClose, onCreateNote, onEdit, onDelete }) => {
+const GroupContextMenu = ({ x, y, data, onClose, onCreateNote, onCreateSubgroup, onEdit, onDelete }) => {
   const handleEdit = (e) => {
     e.stopPropagation();
     if (onEdit) onEdit(data);
@@ -8,6 +8,11 @@ const GroupContextMenu = ({ x, y, data, onClose, onCreateNote, onEdit, onDelete 
   const handleAddNote = () => {
     onClose();
     if (onCreateNote) onCreateNote(data.categoryId, data._id);
+  };
+
+  const handleAddSubgroup = () => {
+    onClose();
+    if (onCreateSubgroup) onCreateSubgroup(data);
   };
 
   const handleDelete = (e) => {
@@ -36,6 +41,17 @@ const GroupContextMenu = ({ x, y, data, onClose, onCreateNote, onEdit, onDelete 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
         </svg>
         Edit Group
+      </button>
+
+      {/* Add Subgroup */}
+      <button
+        onClick={handleAddSubgroup}
+        className="text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-blue-600 hover:text-white flex items-center gap-3 mx-1.5 rounded transition"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+        Add Subgroup
       </button>
 
       {/* Add Note */}

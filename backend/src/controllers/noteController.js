@@ -4,13 +4,39 @@ import SubTopic from '../models/SubTopic.js';
 import Category from '../models/Category.js';
 import Group from '../models/Group.js';
 
+// Helper function to create nested population for subgroups
+// Supports up to 10 levels of nesting (can be adjusted if needed)
+const createNestedGroupPopulate = (depth = 10) => {
+  let populate = { path: 'notes' };
+  
+  for (let i = 0; i < depth; i++) {
+    populate = {
+      path: 'subgroups',
+      populate: [
+        { path: 'notes' },
+        populate
+      ]
+    };
+  }
+  
+  return populate;
+};
+
 // --- GET ALL NOTES (For authenticated user) ---
 export const getAllNotes = asyncHandler(async (req, res) => {
+  const nestedGroupPopulate = createNestedGroupPopulate(10);
+  
   const topics = await Topic.find({ userId: req.user._id })
     .populate({
       path: 'categories',
       populate: [
-        { path: 'groups', populate: { path: 'notes' } },
+        { 
+          path: 'groups', 
+          populate: [
+            { path: 'notes' },
+            nestedGroupPopulate
+          ]
+        },
         { path: 'notes' }
       ]
     })
@@ -155,17 +181,30 @@ export const deleteCategory = asyncHandler(async (req, res) => {
 
 // --- CREATE GROUP ---
 export const createGroup = asyncHandler(async (req, res) => {
-  const { name, categoryId, topicId } = req.body;
+  const { name, categoryId, topicId, parentGroupId } = req.body;
 
   if (!name || !categoryId || !topicId) {
     res.status(400);
     throw new Error("Group name, Category ID, and Topic ID are required");
   }
 
+  // If parentGroupId is provided, verify it exists and belongs to user
+  if (parentGroupId) {
+    const parentGroup = await Group.findOne({ 
+      _id: parentGroupId, 
+      userId: req.user._id 
+    });
+    if (!parentGroup) {
+      res.status(404);
+      throw new Error("Parent group not found or unauthorized");
+    }
+  }
+
   const group = await Group.create({ 
     name, 
     categoryId, 
     topicId,
+    parentGroupId: parentGroupId || null,
     userId: req.user._id
   });
   
@@ -193,11 +232,25 @@ export const updateGroup = asyncHandler(async (req, res) => {
   res.status(200).json(updatedGroup);
 });
 
+// Helper function to recursively get all descendant group IDs
+const getAllDescendantGroupIds = async (groupId, userId) => {
+  const descendantIds = [];
+  const childGroups = await Group.find({ parentGroupId: groupId, userId });
+  
+  for (const child of childGroups) {
+    descendantIds.push(child._id);
+    const childDescendants = await getAllDescendantGroupIds(child._id, userId);
+    descendantIds.push(...childDescendants);
+  }
+  
+  return descendantIds;
+};
+
 // --- DELETE GROUP ---
 export const deleteGroup = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const group = await Group.findOneAndDelete({ 
+  const group = await Group.findOne({ 
     _id: id, 
     userId: req.user._id 
   });
@@ -207,10 +260,17 @@ export const deleteGroup = asyncHandler(async (req, res) => {
     throw new Error("Group not found or unauthorized");
   }
 
-  // Delete all notes in this group
-  await SubTopic.deleteMany({ groupId: id });
+  // Get all descendant group IDs (nested subgroups)
+  const descendantIds = await getAllDescendantGroupIds(id, req.user._id);
+  const allGroupIds = [id, ...descendantIds];
 
-  res.status(200).json({ message: 'Group deleted successfully', id });
+  // Delete all notes in this group and all nested subgroups
+  await SubTopic.deleteMany({ groupId: { $in: allGroupIds } });
+
+  // Delete all nested subgroups and the group itself
+  await Group.deleteMany({ _id: { $in: allGroupIds } });
+
+  res.status(200).json({ message: 'Group and all nested subgroups deleted successfully', id });
 });
 
 // ==========================================

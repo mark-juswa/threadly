@@ -5,6 +5,13 @@ const GroupSchema = new mongoose.Schema({
   categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
   topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', required: true },
   
+  // Parent group for nesting (null means top-level group under category)
+  parentGroupId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Group', 
+    default: null 
+  },
+  
   // User association
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 
@@ -22,6 +29,13 @@ GroupSchema.virtual('notes', {
   ref: 'SubTopic',
   localField: '_id',
   foreignField: 'groupId'
+});
+
+// Virtual: Find child groups (subgroups) inside this Group
+GroupSchema.virtual('subgroups', {
+  ref: 'Group',
+  localField: '_id',
+  foreignField: 'parentGroupId'
 });
 
 export default mongoose.model('Group', GroupSchema);

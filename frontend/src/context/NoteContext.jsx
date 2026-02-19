@@ -50,6 +50,20 @@ export const NoteProvider = ({ children }) => {
               // First check orphan notes (notes without category)
               foundNote = updatedCurrentTopic.orphanNotes?.find(n => n._id === currentNote._id);
               
+              // Helper function to recursively search for note in nested groups
+              const findNoteInGroup = (group) => {
+                // Check notes in current group
+                const note = group.notes?.find(n => n._id === currentNote._id);
+                if (note) return note;
+                
+                // Recursively check subgroups
+                for (const subgroup of group.subgroups || []) {
+                  const subNote = findNoteInGroup(subgroup);
+                  if (subNote) return subNote;
+                }
+                return null;
+              };
+              
               // If not found, search in all categories and groups for the note
               if (!foundNote) {
                 for (const category of updatedCurrentTopic.categories || []) {
@@ -57,9 +71,9 @@ export const NoteProvider = ({ children }) => {
                   foundNote = category.notes?.find(n => n._id === currentNote._id);
                   if (foundNote) break;
                   
-                  // Check group notes
+                  // Check group notes (including nested subgroups)
                   for (const group of category.groups || []) {
-                    foundNote = group.notes?.find(n => n._id === currentNote._id);
+                    foundNote = findNoteInGroup(group);
                     if (foundNote) break;
                   }
                   if (foundNote) break;

@@ -46,6 +46,7 @@ export const noteService = {
   // ==========================================
   // GROUPS
   // ==========================================
+  // groupData can include: { name, categoryId, topicId, parentGroupId (optional for nested groups) }
   createGroup: async (groupData) => {
     const response = await api.post('/api/notes/groups', groupData);
     return response.data;

@@ -12,6 +12,7 @@ const ModalOverlay = ({
   hideContextMenu, 
   onCreateNote, 
   onCreateGroup, 
+  onCreateSubgroup,
   onCreateCategory, 
   onCreateTopic, 
   onCreateOrphanNote,
@@ -84,6 +85,7 @@ const ModalOverlay = ({
               data={contextMenu.data}
               onClose={hideContextMenu}
               onCreateNote={onCreateNote}
+              onCreateSubgroup={onCreateSubgroup}
               onEdit={onEditGroup}
               onDelete={onDeleteGroup}
             />
