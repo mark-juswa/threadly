@@ -92,6 +92,15 @@ const FloatingToolbar = () => {
   };
 
   const insertChecklist = () => {
+    // Get the current selection and preserve text if any
+    const selection = window.getSelection();
+    let selectedText = '';
+    
+    if (selection && selection.rangeCount > 0) {
+      selectedText = selection.toString().trim();
+    }
+    
+    // Create checklist HTML with the selected text preserved
     const checklistHtml = `
       <div class="checklist-item flex items-center gap-2 my-1" contenteditable="false">
         <span 
@@ -122,6 +131,27 @@ const FloatingToolbar = () => {
             if (e.key === 'Enter') {
               e.preventDefault();
               const checklistItem = el.parentElement;
+              const textContent = el.textContent.trim();
+              
+              // If current item is empty, exit checklist mode (Notion-style double Enter)
+              if (textContent === '') {
+                const p = document.createElement('p');
+                p.innerHTML = '<br>';
+                checklistItem.insertAdjacentElement('afterend', p);
+                checklistItem.remove();
+                
+                // Focus on the new paragraph
+                const range = document.createRange();
+                const sel = window.getSelection();
+                range.setStart(p, 0);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                p.focus();
+                return;
+              }
+              
+              // Create new checklist item
               const newItem = checklistItem.cloneNode(true);
               const newTextSpan = newItem.querySelector('.checklist-text');
               const newCheckbox = newItem.querySelector('.checklist-checkbox');
@@ -132,6 +162,8 @@ const FloatingToolbar = () => {
               newCheckbox.innerHTML = '';
               newTextSpan.classList.remove('line-through', 'text-gray-500');
               checklistItem.insertAdjacentElement('afterend', newItem);
+              
+              // Focus on new item
               const range = document.createRange();
               const sel = window.getSelection();
               range.setStart(newTextSpan, 0);
@@ -139,44 +171,43 @@ const FloatingToolbar = () => {
               sel.removeAllRanges();
               sel.addRange(range);
               newTextSpan.focus();
-            } else if (e.key === 'Backspace' && el.textContent === '') {
-              e.preventDefault();
-              const checklistItem = el.parentElement;
-              const prevSibling = checklistItem.previousElementSibling;
-              const nextSibling = checklistItem.nextElementSibling;
-              checklistItem.remove();
-              if (prevSibling && prevSibling.classList.contains('checklist-item')) {
-                const prevTextSpan = prevSibling.querySelector('.checklist-text');
-                if (prevTextSpan) {
+            } else if (e.key === 'Backspace') {
+              const textContent = el.textContent;
+              const sel = window.getSelection();
+              const isAtStart = sel && sel.rangeCount > 0 && sel.getRangeAt(0).startOffset === 0 && sel.isCollapsed;
+              
+              // Only handle backspace if item is empty OR cursor is at the very start
+              if (textContent === '' || (isAtStart && textContent.length > 0)) {
+                if (textContent === '') {
+                  e.preventDefault();
+                  const checklistItem = el.parentElement;
+                  const prevSibling = checklistItem.previousElementSibling;
+                  
+                  // Convert to paragraph (exit checklist mode)
+                  const p = document.createElement('p');
+                  p.innerHTML = '<br>';
+                  checklistItem.insertAdjacentElement('afterend', p);
+                  checklistItem.remove();
+                  
+                  // Focus on the new paragraph
                   const range = document.createRange();
-                  const sel = window.getSelection();
-                  range.selectNodeContents(prevTextSpan);
-                  range.collapse(false);
-                  sel.removeAllRanges();
-                  sel.addRange(range);
-                  prevTextSpan.focus();
-                }
-              } else if (nextSibling && nextSibling.classList.contains('checklist-item')) {
-                const nextTextSpan = nextSibling.querySelector('.checklist-text');
-                if (nextTextSpan) {
-                  const range = document.createRange();
-                  const sel = window.getSelection();
-                  range.setStart(nextTextSpan, 0);
+                  const selection = window.getSelection();
+                  range.setStart(p, 0);
                   range.collapse(true);
-                  sel.removeAllRanges();
-                  sel.addRange(range);
-                  nextTextSpan.focus();
+                  selection.removeAllRanges();
+                  selection.addRange(range);
                 }
-              } else {
-                const editor = document.getElementById('editor');
-                if (editor) editor.focus();
+                // If there's text and cursor is at start, let default behavior happen (merge with previous)
               }
+              // Otherwise, let default backspace behavior delete characters
             }
           })(event, this)"
-        ></span>
+        >${selectedText}</span>
       </div>
     `;
+    
     document.execCommand('insertHTML', false, checklistHtml);
+    
     // Focus on the newly created checklist text span
     setTimeout(() => {
       const editor = document.getElementById('editor');
@@ -186,8 +217,14 @@ const FloatingToolbar = () => {
         if (lastItem) {
           const range = document.createRange();
           const sel = window.getSelection();
-          range.setStart(lastItem, 0);
-          range.collapse(true);
+          // If there was selected text, place cursor at the end
+          if (selectedText) {
+            range.selectNodeContents(lastItem);
+            range.collapse(false); // collapse to end
+          } else {
+            range.setStart(lastItem, 0);
+            range.collapse(true);
+          }
           sel.removeAllRanges();
           sel.addRange(range);
           lastItem.focus();
