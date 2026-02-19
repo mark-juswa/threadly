@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useState, forwardRef } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import { uploadService } from '../../api/uploadService';
 
@@ -6,12 +6,16 @@ const RichTextEditor = forwardRef((props, ref) => {
   const editorRef = useRef(null);
   const { currentNote, updateNote } = useNotes();
 
-  // Expose the editor ref to parent components
-  useImperativeHandle(ref, () => ({
-    get current() {
-      return editorRef.current;
+  // Sync the forwarded ref with our internal ref
+  useEffect(() => {
+    if (ref) {
+      if (typeof ref === 'function') {
+        ref(editorRef.current);
+      } else {
+        ref.current = editorRef.current;
+      }
     }
-  }));
+  }, [ref, currentNote]); // Re-sync when note changes to ensure ref is updated
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef(null);
 
