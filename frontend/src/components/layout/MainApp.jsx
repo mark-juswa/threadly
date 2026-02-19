@@ -34,9 +34,9 @@ const MainApp = () => {
     setShowCreateModal(true);
   };
 
-  const handleCreateNote = (categoryId) => {
+  const handleCreateNote = (categoryId, groupId = null) => {
     setCreateModalType('note');
-    setCreateModalData({ categoryId });
+    setCreateModalData({ categoryId, groupId });
     setShowCreateModal(true);
   };
 
