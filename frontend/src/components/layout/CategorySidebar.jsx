@@ -232,22 +232,21 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
         {!currentTopic ? (
           <div className="flex flex-col items-center justify-center h-full px-4">
             {topics.length === 0 ? (
-              // No topics exist - show onboarding for new users
-              <div className="text-center">
-                <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-500/20 to-green-600/10">
-                  <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              // No topics exist - show subtle placeholder for new users
+              <div className="flex flex-col items-center text-center opacity-40">
+                <div className="flex items-center justify-center w-12 h-12 mb-3 rounded-full bg-gray-800/50">
+                  <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                 </div>
-                <h3 className="mb-2 font-semibold text-white">Welcome to your Workspace!</h3>
-                <p className="mb-4 text-sm text-gray-500">
-                  Start by creating your first topic to organize your notes.
+                <p className="mb-3 text-sm text-gray-600">
+                  No topics yet
                 </p>
                 <button
                   onClick={onCreateTopic}
-                  className="flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-green-400 bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 hover:border-green-500/30 rounded-lg px-4 py-2.5 transition-all duration-200"
+                  className="flex items-center justify-center gap-2 text-xs text-gray-500 hover:text-gray-300 transition-colors duration-200"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                   </svg>
                   <span>Create Topic</span>

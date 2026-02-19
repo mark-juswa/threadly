@@ -17,7 +17,7 @@ const TopicSidebar = ({ showContextMenu, onCreateTopic }) => {
     <aside className="w-20 bg-black border-r border-[#222225] flex flex-col items-center py-6 flex-shrink-0">
       {/* Logo */}
       <div className="flex items-center justify-center w-12 h-12 mb-8 text-xs font-bold text-black transition bg-gray-200 rounded-lg shadow-lg cursor-pointer hover:bg-white shadow-white/10">
-        <img src="/Logo2.png" alt="" />
+        <img src="/Logo3.png" alt="" />
       </div>
 
       {/* Topic Buttons */}

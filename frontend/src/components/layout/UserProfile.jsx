@@ -1,12 +1,17 @@
+import { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import LogoutModal from '../modals/LogoutModal';
 
 const UserProfile = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      await logout();
-    }
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const closeLogoutModal = () => {
+    setShowLogoutModal(false);
   };
 
   if (!user) return null;
@@ -42,7 +47,7 @@ const UserProfile = () => {
 
       {/* Logout Button */}
       <button
-        onClick={handleLogout}
+        onClick={handleLogoutClick}
         className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-800/50 rounded transition-colors"
         title="Logout"
       >
@@ -50,6 +55,11 @@ const UserProfile = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
         </svg>
       </button>
+
+      {/* Logout Modal */}
+      {showLogoutModal && (
+        <LogoutModal onClose={closeLogoutModal} />
+      )}
     </div>
   );
 };
