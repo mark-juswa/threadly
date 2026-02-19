@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 const LogoutModal = ({ onClose }) => {
@@ -16,7 +17,7 @@ const LogoutModal = ({ onClose }) => {
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">
       <div className="bg-[#1c1c1c] w-full max-w-[360px] rounded-2xl p-6 shadow-2xl border border-gray-800">
         {/* Icon */}
@@ -58,7 +59,8 @@ const LogoutModal = ({ onClose }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
