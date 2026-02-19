@@ -129,12 +129,35 @@ const EditorOutlineSidebar = ({ editorRef }) => {
       }
     });
 
+    // Extract custom checklist items (div.checklist-item with span.checklist-checkbox)
+    const customChecklistItems = editor.querySelectorAll('.checklist-item');
+    customChecklistItems.forEach((item, index) => {
+      const checkbox = item.querySelector('.checklist-checkbox');
+      const textSpan = item.querySelector('.checklist-text');
+      if (checkbox && textSpan) {
+        const text = textSpan.textContent.trim();
+        if (text && text.length > 0) {
+          const id = `checklist-custom-${index}`;
+          item.setAttribute('data-outline-id', id);
+          
+          items.checklists.push({
+            id,
+            type: 'checklist',
+            checked: checkbox.getAttribute('data-checked') === 'true',
+            text: text.slice(0, 40) + (text.length > 40 ? '...' : ''),
+            element: item,
+            checkbox: checkbox,
+          });
+        }
+      }
+    });
+
     // Also check for [x] or [ ] style checklists in text
-    const allElements = editor.querySelectorAll('li, p, div');
+    const allElements = editor.querySelectorAll('li, p, div:not(.checklist-item)');
     allElements.forEach((el, index) => {
       const text = el.textContent.trim();
       const checkboxMatch = text.match(/^\[([xX ])\]\s*(.+)/);
-      if (checkboxMatch && !el.querySelector('input[type="checkbox"]')) {
+      if (checkboxMatch && !el.querySelector('input[type="checkbox"]') && !el.classList.contains('checklist-item')) {
         const id = `checklist-text-${index}`;
         el.setAttribute('data-outline-id', id);
         

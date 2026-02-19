@@ -119,32 +119,81 @@ const FloatingToolbar = () => {
           class="checklist-text text-gray-300" 
           contenteditable="true"
           onkeydown="(function(e, el) {
-            if ((e.key === 'Backspace' || e.key === 'Delete') && el.textContent.trim() === '') {
+            if (e.key === 'Enter') {
               e.preventDefault();
               const checklistItem = el.parentElement;
-              const nextSibling = checklistItem.nextSibling;
-              const prevSibling = checklistItem.previousSibling;
+              const newItem = checklistItem.cloneNode(true);
+              const newTextSpan = newItem.querySelector('.checklist-text');
+              const newCheckbox = newItem.querySelector('.checklist-checkbox');
+              newTextSpan.textContent = '';
+              newCheckbox.setAttribute('data-checked', 'false');
+              newCheckbox.classList.remove('bg-green-500', 'border-green-500');
+              newCheckbox.classList.add('border-gray-400');
+              newCheckbox.innerHTML = '';
+              newTextSpan.classList.remove('line-through', 'text-gray-500');
+              checklistItem.insertAdjacentElement('afterend', newItem);
+              const range = document.createRange();
+              const sel = window.getSelection();
+              range.setStart(newTextSpan, 0);
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+              newTextSpan.focus();
+            } else if (e.key === 'Backspace' && el.textContent === '') {
+              e.preventDefault();
+              const checklistItem = el.parentElement;
+              const prevSibling = checklistItem.previousElementSibling;
+              const nextSibling = checklistItem.nextElementSibling;
               checklistItem.remove();
-              // Move cursor to appropriate position
-              const editor = document.getElementById('editor');
-              if (editor) {
-                editor.focus();
-                if (nextSibling && nextSibling.nodeType === 1) {
+              if (prevSibling && prevSibling.classList.contains('checklist-item')) {
+                const prevTextSpan = prevSibling.querySelector('.checklist-text');
+                if (prevTextSpan) {
                   const range = document.createRange();
                   const sel = window.getSelection();
-                  range.setStart(nextSibling, 0);
+                  range.selectNodeContents(prevTextSpan);
+                  range.collapse(false);
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                  prevTextSpan.focus();
+                }
+              } else if (nextSibling && nextSibling.classList.contains('checklist-item')) {
+                const nextTextSpan = nextSibling.querySelector('.checklist-text');
+                if (nextTextSpan) {
+                  const range = document.createRange();
+                  const sel = window.getSelection();
+                  range.setStart(nextTextSpan, 0);
                   range.collapse(true);
                   sel.removeAllRanges();
                   sel.addRange(range);
+                  nextTextSpan.focus();
                 }
+              } else {
+                const editor = document.getElementById('editor');
+                if (editor) editor.focus();
               }
             }
           })(event, this)"
-        >Checklist item</span>
+        ></span>
       </div>
     `;
     document.execCommand('insertHTML', false, checklistHtml);
-    document.getElementById('editor')?.focus();
+    // Focus on the newly created checklist text span
+    setTimeout(() => {
+      const editor = document.getElementById('editor');
+      if (editor) {
+        const checklistItems = editor.querySelectorAll('.checklist-text');
+        const lastItem = checklistItems[checklistItems.length - 1];
+        if (lastItem) {
+          const range = document.createRange();
+          const sel = window.getSelection();
+          range.setStart(lastItem, 0);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          lastItem.focus();
+        }
+      }
+    }, 10);
   };
 
   if (!visible) return null;
