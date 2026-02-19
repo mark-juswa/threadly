@@ -81,6 +81,148 @@ const RichTextEditor = forwardRef((props, ref) => {
     }, 1000); // Save after 1 second of no typing
   };
 
+  // Helper function to find the parent list item (li) or checklist item
+  const findListItem = (node) => {
+    let current = node;
+    while (current && current !== editorRef.current) {
+      if (current.nodeName === 'LI') return { type: 'list', element: current };
+      if (current.classList?.contains('checklist-item')) return { type: 'checklist', element: current };
+      current = current.parentNode;
+    }
+    return null;
+  };
+
+  // Helper function to get the text content of a list item
+  const getListItemText = (listItem) => {
+    if (listItem.type === 'checklist') {
+      const textSpan = listItem.element.querySelector('.checklist-text');
+      return textSpan ? textSpan.textContent.trim() : '';
+    }
+    return listItem.element.textContent.trim();
+  };
+
+  // Helper function to check if cursor is at the start of an element
+  const isCursorAtStart = () => {
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return false;
+    const range = selection.getRangeAt(0);
+    return range.startOffset === 0 && range.collapsed;
+  };
+
+  // Helper function to convert list item to paragraph
+  const convertToParagraph = (listItem) => {
+    const p = document.createElement('p');
+    p.innerHTML = '<br>';
+    
+    if (listItem.type === 'checklist') {
+      listItem.element.insertAdjacentElement('afterend', p);
+      listItem.element.remove();
+    } else {
+      // For ul/ol list items
+      const parentList = listItem.element.parentNode;
+      const siblings = Array.from(parentList.children);
+      const itemIndex = siblings.indexOf(listItem.element);
+      
+      if (siblings.length === 1) {
+        // Only one item in list - replace entire list with paragraph
+        parentList.insertAdjacentElement('afterend', p);
+        parentList.remove();
+      } else if (itemIndex === 0) {
+        // First item - insert paragraph before list and remove item
+        parentList.insertAdjacentElement('beforebegin', p);
+        listItem.element.remove();
+      } else {
+        // Middle or last item - insert paragraph after current item and remove item
+        listItem.element.insertAdjacentElement('afterend', p);
+        listItem.element.remove();
+        
+        // If the list is now empty, remove it
+        if (parentList.children.length === 0) {
+          parentList.remove();
+        }
+      }
+    }
+    
+    // Focus on the new paragraph
+    const range = document.createRange();
+    const selection = window.getSelection();
+    range.setStart(p, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
+  // Handle keydown for list behaviors (Enter and Backspace)
+  const handleKeyDown = (e) => {
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return;
+
+    const listItem = findListItem(selection.focusNode);
+    if (!listItem) return;
+
+    const itemText = getListItemText(listItem);
+    const isAtStart = isCursorAtStart();
+
+    // Handle Enter key - create new item or exit list mode
+    if (e.key === 'Enter') {
+      // Skip for checklist - it has its own handler
+      if (listItem.type === 'checklist') return;
+
+      // If current list item is empty, exit list mode
+      if (itemText === '') {
+        e.preventDefault();
+        convertToParagraph(listItem);
+        handleContentChange();
+        return;
+      }
+      // Otherwise, let default behavior create new list item
+    }
+
+    // Handle Backspace key
+    if (e.key === 'Backspace') {
+      // Skip for checklist - it has its own handler
+      if (listItem.type === 'checklist') return;
+
+      // If item is empty OR cursor is at start with text, convert to paragraph
+      if (itemText === '' || (isAtStart && itemText.length > 0)) {
+        if (itemText === '') {
+          e.preventDefault();
+          convertToParagraph(listItem);
+          handleContentChange();
+        } else if (isAtStart) {
+          // Cursor at start with text - convert but preserve text
+          e.preventDefault();
+          const p = document.createElement('p');
+          p.innerHTML = listItem.element.innerHTML;
+          
+          const parentList = listItem.element.parentNode;
+          const siblings = Array.from(parentList.children);
+          
+          if (siblings.length === 1) {
+            parentList.insertAdjacentElement('afterend', p);
+            parentList.remove();
+          } else {
+            listItem.element.insertAdjacentElement('afterend', p);
+            listItem.element.remove();
+            if (parentList.children.length === 0) {
+              parentList.remove();
+            }
+          }
+          
+          // Focus at start of the new paragraph
+          const range = document.createRange();
+          const sel = window.getSelection();
+          range.setStart(p, 0);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          handleContentChange();
+        }
+      }
+      // Otherwise, let default backspace behavior delete characters
+    }
+  };
+
   // Markdown-like shortcuts
   const handleKeyUp = (e) => {
     if (e.key === ' ') {
@@ -115,6 +257,12 @@ const RichTextEditor = forwardRef((props, ref) => {
           break;
         }
       }
+    }
+
+    // Clean up ghost list markers - remove empty lists
+    if (editorRef.current) {
+      const emptyLists = editorRef.current.querySelectorAll('ul:empty, ol:empty');
+      emptyLists.forEach(list => list.remove());
     }
 
     handleContentChange();
@@ -165,6 +313,7 @@ const RichTextEditor = forwardRef((props, ref) => {
         contentEditable={!!currentNote}
         className="w-full h-full overflow-y-auto bg-transparent focus:outline-none text-gray-300 p-8 text-md font-light leading-relaxed empty:before:content-[attr(placeholder)] empty:before:text-gray-600"
         placeholder={currentNote ? "Type '# ' for Heading, '- ' for list, or select text to format..." : "Select a note to start editing"}
+        onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         onInput={handleContentChange}
         onDrop={handleDrop}
