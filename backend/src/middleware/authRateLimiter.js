@@ -1,39 +1,82 @@
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
 
-// Create Redis client from environment
-const redis = Redis.fromEnv();
+// Check if Upstash Redis is properly configured
+const isRedisConfigured = () => {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  return url && token && url.length > 0 && token.length > 0;
+};
 
-// Stricter rate limiter for authentication routes
-// Prevents brute force attacks on login/registration
-const authRatelimit = new Ratelimit({
-  redis: redis,
-  limiter: Ratelimit.slidingWindow(10, '15 m'), // 10 requests per 15 minutes per IP
-  analytics: true,
-  prefix: 'ratelimit:auth',
-});
+// Create Redis client only if configured
+let redis = null;
+let authRatelimit = null;
+let oauthRatelimit = null;
+let loginFailRatelimit = null;
+let redisAvailable = false;
 
-// Even stricter rate limiter for OAuth initiation
-// Prevents OAuth flood attacks
-const oauthRatelimit = new Ratelimit({
-  redis: redis,
-  limiter: Ratelimit.slidingWindow(5, '5 m'), // 5 OAuth attempts per 5 minutes per IP
-  analytics: true,
-  prefix: 'ratelimit:oauth',
-});
+const initializeRateLimiters = async () => {
+  if (!isRedisConfigured()) {
+    console.warn('⚠️  Auth rate limiting disabled: Upstash Redis not configured');
+    return;
+  }
 
-// Rate limiter for failed login attempts (by email/username)
-const loginFailRatelimit = new Ratelimit({
-  redis: redis,
-  limiter: Ratelimit.slidingWindow(5, '30 m'), // 5 failed attempts per 30 minutes per identifier
-  analytics: true,
-  prefix: 'ratelimit:login-fail',
+  try {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+
+    // Test connection with a simple ping
+    await redis.ping();
+    console.log('✅ Auth rate limiting Redis connected');
+    redisAvailable = true;
+
+    // Stricter rate limiter for authentication routes
+    // Prevents brute force attacks on login/registration
+    authRatelimit = new Ratelimit({
+      redis: redis,
+      limiter: Ratelimit.slidingWindow(10, '15 m'), // 10 requests per 15 minutes per IP
+      analytics: true,
+      prefix: 'ratelimit:auth',
+    });
+
+    // Even stricter rate limiter for OAuth initiation
+    // Prevents OAuth flood attacks
+    oauthRatelimit = new Ratelimit({
+      redis: redis,
+      limiter: Ratelimit.slidingWindow(5, '5 m'), // 5 OAuth attempts per 5 minutes per IP
+      analytics: true,
+      prefix: 'ratelimit:oauth',
+    });
+
+    // Rate limiter for failed login attempts (by email/username)
+    loginFailRatelimit = new Ratelimit({
+      redis: redis,
+      limiter: Ratelimit.slidingWindow(5, '30 m'), // 5 failed attempts per 30 minutes per identifier
+      analytics: true,
+      prefix: 'ratelimit:login-fail',
+    });
+  } catch (error) {
+    console.error('⚠️  Auth rate limiting disabled: Redis connection failed:', error.message || error);
+    redisAvailable = false;
+  }
+};
+
+// Initialize on module load (non-blocking)
+initializeRateLimiters().catch(err => {
+  console.error('Auth rate limiter initialization error:', err.message || err);
 });
 
 /**
  * Middleware to rate limit authentication routes
  */
 export const authRateLimiter = async (req, res, next) => {
+  // Skip if Redis is not available
+  if (!redisAvailable || !authRatelimit) {
+    return next();
+  }
+
   try {
     // Get client IP
     const ip = req.ip || 
@@ -58,9 +101,8 @@ export const authRateLimiter = async (req, res, next) => {
     
     next();
   } catch (error) {
-    console.error('Auth rate limiting error:', error);
+    console.error('Auth rate limiting error (failing open):', error.message || error);
     // Fail open - allow request if rate limiting fails
-    // In high-security environments, you might want to fail closed instead
     next();
   }
 };
@@ -69,6 +111,11 @@ export const authRateLimiter = async (req, res, next) => {
  * Middleware to rate limit OAuth initiation
  */
 export const oauthRateLimiter = async (req, res, next) => {
+  // Skip if Redis is not available
+  if (!redisAvailable || !oauthRatelimit) {
+    return next();
+  }
+
   try {
     const ip = req.ip || 
                req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
@@ -91,7 +138,7 @@ export const oauthRateLimiter = async (req, res, next) => {
     
     next();
   } catch (error) {
-    console.error('OAuth rate limiting error:', error);
+    console.error('OAuth rate limiting error (failing open):', error.message || error);
     next();
   }
 };
@@ -101,6 +148,11 @@ export const oauthRateLimiter = async (req, res, next) => {
  * Call this AFTER a failed login attempt
  */
 export const trackFailedLogin = async (identifier) => {
+  // Skip if Redis is not available
+  if (!redisAvailable || !loginFailRatelimit) {
+    return { blocked: false };
+  }
+
   try {
     if (!identifier) return { blocked: false };
     
@@ -113,7 +165,7 @@ export const trackFailedLogin = async (identifier) => {
     
     return { blocked: false, remaining };
   } catch (error) {
-    console.error('Failed login tracking error:', error);
+    console.error('Failed login tracking error (failing open):', error.message || error);
     return { blocked: false };
   }
 };
@@ -122,6 +174,11 @@ export const trackFailedLogin = async (identifier) => {
  * Check if an identifier is currently rate limited (without consuming a token)
  */
 export const isLoginBlocked = async (identifier) => {
+  // Skip if Redis is not available
+  if (!redisAvailable || !loginFailRatelimit) {
+    return false;
+  }
+
   try {
     if (!identifier) return false;
     
@@ -129,7 +186,7 @@ export const isLoginBlocked = async (identifier) => {
     const remaining = await loginFailRatelimit.getRemaining(identifier.toLowerCase());
     return remaining <= 0;
   } catch (error) {
-    console.error('Login block check error:', error);
+    console.error('Login block check error (failing open):', error.message || error);
     return false;
   }
 };
