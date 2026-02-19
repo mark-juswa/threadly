@@ -15,13 +15,26 @@ const LoginView = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
+    const errorCode = params.get('error');
 
     if (authStatus === 'success') {
       // OAuth successful - check auth and reload
       checkAuth();
       window.history.replaceState({}, '', '/'); // Clean URL
     } else if (authStatus === 'failed') {
-      setError('Google authentication failed. Please try again.');
+      // Map error codes to user-friendly messages
+      const errorMessages = {
+        'invalid_state': 'Security verification failed. Please try again.',
+        'state_expired': 'Login session expired. Please try again.',
+        'rate_limited': 'Too many login attempts. Please wait a few minutes.',
+        'auth_failed': 'Google authentication failed. Please try again.',
+        'server_error': 'Server error occurred. Please try again later.',
+        'account_disabled': 'Your account has been disabled. Contact support.',
+        'access_denied': 'Access was denied. Please try again.',
+      };
+      
+      const message = errorMessages[errorCode] || 'Google authentication failed. Please try again.';
+      setError(message);
       window.history.replaceState({}, '', '/'); // Clean URL
     }
   }, [checkAuth]);

@@ -74,7 +74,8 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-//app.use(ratelimiter);
+// Global rate limiter for all routes
+app.use(ratelimiter);
 
 
 // Routes
