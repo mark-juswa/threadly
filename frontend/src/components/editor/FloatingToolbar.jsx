@@ -91,6 +91,34 @@ const FloatingToolbar = () => {
     }
   };
 
+  const transformCase = (type) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+
+    const range = selection.getRangeAt(0);
+    const selectedText = selection.toString();
+    
+    let transformedText;
+    if (type === 'uppercase') {
+      transformedText = selectedText.toUpperCase();
+    } else {
+      transformedText = selectedText.toLowerCase();
+    }
+
+    // Delete the selected content and insert transformed text
+    range.deleteContents();
+    const textNode = document.createTextNode(transformedText);
+    range.insertNode(textNode);
+
+    // Re-select the transformed text
+    const newRange = document.createRange();
+    newRange.selectNodeContents(textNode);
+    selection.removeAllRanges();
+    selection.addRange(newRange);
+
+    document.getElementById('editor')?.focus();
+  };
+
   const insertChecklist = () => {
     // Get the current selection and preserve text if any
     const selection = window.getSelection();
@@ -280,6 +308,30 @@ const FloatingToolbar = () => {
         title="Underline (Ctrl+U)"
       >
         <span className="underline">U</span>
+      </button>
+
+      {/* Uppercase */}
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          transformCase('uppercase');
+        }}
+        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition text-xs font-bold"
+        title="Uppercase"
+      >
+        AA
+      </button>
+
+      {/* Lowercase */}
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          transformCase('lowercase');
+        }}
+        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition text-xs font-bold"
+        title="Lowercase"
+      >
+        aa
       </button>
 
       {/* Text Color */}

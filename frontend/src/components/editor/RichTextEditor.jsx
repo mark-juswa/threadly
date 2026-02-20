@@ -152,6 +152,19 @@ const RichTextEditor = forwardRef((props, ref) => {
     selection.addRange(range);
   };
 
+  // Toggle highlight function for keyboard shortcut
+  const toggleHighlight = () => {
+    const bgColor = document.queryCommandValue('backColor');
+    
+    if (bgColor === 'rgb(250, 204, 21)' || bgColor === '#facc15') {
+      document.execCommand('hiliteColor', false, 'transparent');
+      document.execCommand('foreColor', false, '#d1d5db');
+    } else {
+      document.execCommand('hiliteColor', false, '#facc15');
+      document.execCommand('foreColor', false, 'black');
+    }
+  };
+
   // Handle keydown for list behaviors (Enter and Backspace) and formatting shortcuts
   const handleKeyDown = (e) => {
     // Handle formatting keyboard shortcuts (Ctrl+B, Ctrl+I, Ctrl+U)
@@ -170,6 +183,13 @@ const RichTextEditor = forwardRef((props, ref) => {
           document.execCommand('underline', false, null);
           return;
       }
+    }
+
+    // Handle Alt+H for highlight toggle
+    if (e.altKey && e.key.toLowerCase() === 'h') {
+      e.preventDefault();
+      toggleHighlight();
+      return;
     }
 
     const selection = window.getSelection();
@@ -323,6 +343,20 @@ const RichTextEditor = forwardRef((props, ref) => {
     editorRef.current.classList.remove('bg-gray-900/50');
   };
 
+  // Handle paste to strip external formatting
+  const handlePaste = (e) => {
+    e.preventDefault();
+    
+    // Get plain text from clipboard
+    const text = e.clipboardData.getData('text/plain');
+    
+    if (text) {
+      // Insert plain text at cursor position
+      document.execCommand('insertText', false, text);
+      handleContentChange();
+    }
+  };
+
   return (
     <>
       <div
@@ -334,6 +368,7 @@ const RichTextEditor = forwardRef((props, ref) => {
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         onInput={handleContentChange}
+        onPaste={handlePaste}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}

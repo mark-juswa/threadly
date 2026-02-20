@@ -42,6 +42,10 @@ body {
 }
 
 /* Editor styles (Notion-like) */
+#editor {
+  font-size: 1rem;
+}
+
 #editor h1 {
   font-size: 2.25rem;
   font-weight: 700;
@@ -64,6 +68,91 @@ body {
   margin-bottom: 0.5rem;
   line-height: 1.4;
   padding-top: 0.6rem;
+}
+
+/* Responsive editor text sizes */
+@media (max-width: 768px) {
+  #editor {
+    font-size: 0.9rem;
+    padding: 1rem;
+  }
+
+  #editor h1 {
+    font-size: 1.75rem;
+    padding-top: 0.75rem;
+  }
+
+  #editor h2 {
+    font-size: 1.5rem;
+    padding-top: 0.6rem;
+  }
+
+  #editor h3 {
+    font-size: 1.25rem;
+    padding-top: 0.5rem;
+  }
+
+  #editor ul,
+  #editor ol {
+    padding-left: 1.25rem;
+  }
+
+  #editor blockquote {
+    padding-left: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  #editor pre {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  #editor img {
+    max-width: 100% !important;
+    max-height: 300px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  #editor {
+    font-size: 0.85rem;
+    padding: 0.75rem;
+  }
+
+  #editor h1 {
+    font-size: 1.5rem;
+    padding-top: 0.5rem;
+  }
+
+  #editor h2 {
+    font-size: 1.25rem;
+    padding-top: 0.4rem;
+  }
+
+  #editor h3 {
+    font-size: 1.1rem;
+    padding-top: 0.3rem;
+  }
+
+  #editor ul,
+  #editor ol {
+    padding-left: 1rem;
+  }
+
+  #editor blockquote {
+    padding-left: 0.5rem;
+    border-left-width: 3px;
+  }
+
+  #editor pre {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  #editor img {
+    max-width: 100% !important;
+    max-height: 200px !important;
+  }
 }
 
 #editor ul {
@@ -118,6 +207,19 @@ body {
   transform: translate(-50%, -100%);
   margin-top: -12px;
   pointer-events: auto;
+}
+
+/* Responsive floating toolbar */
+@media (max-width: 640px) {
+  .floating-toolbar {
+    flex-wrap: wrap;
+    max-width: 280px;
+    justify-content: center;
+  }
+
+  .floating-toolbar button {
+    padding: 0.25rem;
+  }
 }
 
 /* Editor Outline Sidebar */
