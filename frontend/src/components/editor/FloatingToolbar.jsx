@@ -53,8 +53,37 @@ const FloatingToolbar = () => {
     };
   }, []);
 
+  // Save and restore selection to ensure formatting works correctly
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      return selection.getRangeAt(0).cloneRange();
+    }
+    return null;
+  };
+
+  const restoreSelection = (range) => {
+    if (range) {
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  };
+
   const formatDoc = (cmd, value = null) => {
+    // Save selection before any DOM operations
+    const savedRange = saveSelection();
+    
+    // Ensure styleWithCSS is enabled for consistent behavior
+    document.execCommand('styleWithCSS', false, true);
+    
+    // Restore selection to ensure it's active
+    restoreSelection(savedRange);
+    
+    // Execute the formatting command
     document.execCommand(cmd, false, value);
+    
+    // Keep focus on editor
     document.getElementById('editor')?.focus();
   };
 
@@ -69,7 +98,10 @@ const FloatingToolbar = () => {
   };
 
   const toggleTextColor = () => {
+    const savedRange = saveSelection();
     document.execCommand('styleWithCSS', false, true);
+    restoreSelection(savedRange);
+    
     const currentColor = document.queryCommandValue('foreColor');
     
     if (currentColor === 'rgb(239, 68, 68)' || currentColor === '#ef4444') {
@@ -77,9 +109,14 @@ const FloatingToolbar = () => {
     } else {
       document.execCommand('foreColor', false, '#ef4444');
     }
+    document.getElementById('editor')?.focus();
   };
 
   const toggleHighlight = () => {
+    const savedRange = saveSelection();
+    document.execCommand('styleWithCSS', false, true);
+    restoreSelection(savedRange);
+    
     const bgColor = document.queryCommandValue('backColor');
     
     if (bgColor === 'rgb(250, 204, 21)' || bgColor === '#facc15') {
@@ -89,6 +126,7 @@ const FloatingToolbar = () => {
       document.execCommand('hiliteColor', false, '#facc15');
       document.execCommand('foreColor', false, 'black');
     }
+    document.getElementById('editor')?.focus();
   };
 
   const transformCase = (type) => {

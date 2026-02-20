@@ -154,6 +154,9 @@ const RichTextEditor = forwardRef((props, ref) => {
 
   // Toggle highlight function for keyboard shortcut
   const toggleHighlight = () => {
+    // Ensure styleWithCSS is enabled
+    document.execCommand('styleWithCSS', false, true);
+    
     const bgColor = document.queryCommandValue('backColor');
     
     if (bgColor === 'rgb(250, 204, 21)' || bgColor === '#facc15') {
@@ -165,6 +168,14 @@ const RichTextEditor = forwardRef((props, ref) => {
     }
   };
 
+  // Apply formatting command with proper selection handling
+  const applyFormat = (cmd, value = null) => {
+    // Ensure styleWithCSS is enabled for consistent behavior
+    document.execCommand('styleWithCSS', false, true);
+    // Execute the formatting command
+    document.execCommand(cmd, false, value);
+  };
+
   // Handle keydown for list behaviors (Enter and Backspace) and formatting shortcuts
   const handleKeyDown = (e) => {
     // Handle formatting keyboard shortcuts (Ctrl+B, Ctrl+I, Ctrl+U)
@@ -172,15 +183,15 @@ const RichTextEditor = forwardRef((props, ref) => {
       switch (e.key.toLowerCase()) {
         case 'b':
           e.preventDefault();
-          document.execCommand('bold', false, null);
+          applyFormat('bold');
           return;
         case 'i':
           e.preventDefault();
-          document.execCommand('italic', false, null);
+          applyFormat('italic');
           return;
         case 'u':
           e.preventDefault();
-          document.execCommand('underline', false, null);
+          applyFormat('underline');
           return;
       }
     }
