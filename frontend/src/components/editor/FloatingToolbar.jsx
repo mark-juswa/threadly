@@ -248,34 +248,46 @@ const FloatingToolbar = () => {
     >
       {/* Bold */}
       <button
-        onClick={() => formatDoc('bold')}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          formatDoc('bold');
+        }}
         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition"
-        title="Bold"
+        title="Bold (Ctrl+B)"
       >
         <strong className="font-serif">B</strong>
       </button>
 
       {/* Italic */}
       <button
-        onClick={() => formatDoc('italic')}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          formatDoc('italic');
+        }}
         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition"
-        title="Italic"
+        title="Italic (Ctrl+I)"
       >
         <em className="font-serif">I</em>
       </button>
 
       {/* Underline */}
       <button
-        onClick={() => formatDoc('underline')}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          formatDoc('underline');
+        }}
         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition"
-        title="Underline"
+        title="Underline (Ctrl+U)"
       >
         <span className="underline">U</span>
       </button>
 
       {/* Text Color */}
       <button
-        onClick={toggleTextColor}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          toggleTextColor();
+        }}
         className="p-1.5 text-gray-400 hover:bg-gray-700 rounded transition"
         title="Text Color (Red/Default)"
       >
@@ -284,7 +296,10 @@ const FloatingToolbar = () => {
 
       {/* Highlight */}
       <button
-        onClick={toggleHighlight}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          toggleHighlight();
+        }}
         className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-700 rounded transition"
         title="Highlight"
       >
@@ -296,15 +311,18 @@ const FloatingToolbar = () => {
       <div className="w-px h-5 bg-gray-700 mx-1.5" />
 
       {/* Headings */}
-      <button onClick={() => toggleBlock('h1')} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H1</button>
-      <button onClick={() => toggleBlock('h2')} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H2</button>
-      <button onClick={() => toggleBlock('h3')} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H3</button>
+      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h1'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H1</button>
+      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h2'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H2</button>
+      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h3'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H3</button>
 
       <div className="w-px h-5 bg-gray-700 mx-1.5" />
 
       {/* Lists */}
       <button
-        onClick={() => formatDoc('insertUnorderedList')}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          formatDoc('insertUnorderedList');
+        }}
         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition"
         title="Bullet List"
       >
@@ -314,7 +332,10 @@ const FloatingToolbar = () => {
       </button>
       
       <button
-        onClick={() => formatDoc('insertOrderedList')}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          formatDoc('insertOrderedList');
+        }}
         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition"
         title="Numbered List"
       >
@@ -325,7 +346,10 @@ const FloatingToolbar = () => {
 
       {/* Checklist */}
       <button
-        onClick={insertChecklist}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          insertChecklist();
+        }}
         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition"
         title="Checklist"
       >
@@ -338,7 +362,8 @@ const FloatingToolbar = () => {
 
       {/* Clear Formatting */}
       <button
-        onClick={() => {
+        onMouseDown={(e) => {
+          e.preventDefault();
           toggleBlock('p');
           formatDoc('removeFormat');
         }}

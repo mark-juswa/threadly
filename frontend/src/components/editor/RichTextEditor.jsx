@@ -152,8 +152,26 @@ const RichTextEditor = forwardRef((props, ref) => {
     selection.addRange(range);
   };
 
-  // Handle keydown for list behaviors (Enter and Backspace)
+  // Handle keydown for list behaviors (Enter and Backspace) and formatting shortcuts
   const handleKeyDown = (e) => {
+    // Handle formatting keyboard shortcuts (Ctrl+B, Ctrl+I, Ctrl+U)
+    if (e.ctrlKey || e.metaKey) {
+      switch (e.key.toLowerCase()) {
+        case 'b':
+          e.preventDefault();
+          document.execCommand('bold', false, null);
+          return;
+        case 'i':
+          e.preventDefault();
+          document.execCommand('italic', false, null);
+          return;
+        case 'u':
+          e.preventDefault();
+          document.execCommand('underline', false, null);
+          return;
+      }
+    }
+
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount) return;
 
