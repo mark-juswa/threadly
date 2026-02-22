@@ -4,6 +4,12 @@ import SubTopic from '../models/SubTopic.js';
 import Category from '../models/Category.js';
 import Group from '../models/Group.js';
 
+// Import io instance for emitting real-time updates
+let io;
+export const setIO = (ioInstance) => {
+  io = ioInstance;
+};
+
 // Helper function to create nested population for subgroups
 // Supports up to 10 levels of nesting (can be adjusted if needed)
 const createNestedGroupPopulate = (depth = 10) => {
@@ -329,7 +335,7 @@ export const getNote = asyncHandler(async (req, res) => {
 // --- UPDATE NOTE ---
 export const updateNote = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { title, content, topicId, categoryId, groupId } = req.body;
+  const { title, content, topicId, categoryId, groupId, version, sessionId } = req.body;
 
   const note = await SubTopic.findOne({ 
     _id: id, 
@@ -341,13 +347,41 @@ export const updateNote = asyncHandler(async (req, res) => {
     throw new Error("Note not found or unauthorized");
   }
 
+  // Version conflict detection
+  if (version !== undefined && note.version !== version) {
+    res.status(409); // Conflict
+    return res.json({ 
+      conflict: true, 
+      currentVersion: note.version,
+      currentContent: note.content,
+      message: "Note has been modified by another session" 
+    });
+  }
+
   note.title = title || note.title;
   note.content = content !== undefined ? content : note.content;
   note.topicId = topicId || note.topicId;
   note.categoryId = categoryId !== undefined ? categoryId : note.categoryId;
   note.groupId = groupId !== undefined ? groupId : note.groupId;
+  
+  // Increment version on content change
+  if (content !== undefined) {
+    note.version += 1;
+    note.lastModifiedBy = sessionId || null;
+  }
 
   const updatedNote = await note.save();
+  
+  // Emit real-time update to all connected clients of this user
+  if (io && content !== undefined) {
+    io.to(`user:${req.user._id}`).emit('note-sync', {
+      noteId: id,
+      content: updatedNote.content,
+      version: updatedNote.version,
+      lastModifiedBy: updatedNote.lastModifiedBy
+    });
+  }
+  
   res.status(200).json(updatedNote);
 });
 

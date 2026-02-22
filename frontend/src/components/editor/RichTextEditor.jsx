@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState, forwardRef } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import { uploadService } from '../../api/uploadService';
+import { useSocket } from '../../context/SocketContext';
+import { v4 as uuidv4 } from 'uuid';
 
 const RichTextEditor = forwardRef((props, ref) => {
   const editorRef = useRef(null);
   const { currentNote, updateNote } = useNotes();
+  const { socket, connected } = useSocket();
   
   // Track the current note ID to detect actual note changes
   const currentNoteIdRef = useRef(null);
   const isAutoSavingRef = useRef(false);
+  const sessionIdRef = useRef(uuidv4()); // Unique session ID for this tab
+  const currentVersionRef = useRef(null); // Track current version for conflict detection
+  const isSyncingFromSocketRef = useRef(false); // Prevent echo when receiving socket updates
 
   // Sync the forwarded ref with our internal ref
   useEffect(() => {
@@ -38,6 +44,17 @@ const RichTextEditor = forwardRef((props, ref) => {
       }
       
       currentNoteIdRef.current = noteId;
+      currentVersionRef.current = currentNote?.version || 0;
+      
+      // Leave previous note room and join new note room
+      if (socket && connected) {
+        if (previousNoteId) {
+          socket.emit('leave-note', previousNoteId);
+        }
+        if (noteId) {
+          socket.emit('join-note', noteId);
+        }
+      }
       
       if (editorRef.current && currentNote) {
         editorRef.current.innerHTML = currentNote.content || '';
@@ -45,7 +62,62 @@ const RichTextEditor = forwardRef((props, ref) => {
         editorRef.current.innerHTML = '';
       }
     }
-  }, [currentNote?._id, currentNote?.content]);
+  }, [currentNote?._id, currentNote?.content, socket, connected]);
+
+  // Socket listener for real-time sync from other sessions
+  useEffect(() => {
+    if (!socket || !connected) return;
+
+    const handleNoteSync = (data) => {
+      const { noteId, content, version, sessionId } = data;
+      
+      // Ignore updates from this session (our own changes)
+      if (sessionId === sessionIdRef.current) return;
+      
+      // Only sync if we're viewing this note
+      if (noteId !== currentNote?._id) return;
+      
+      // Save cursor position
+      const selection = window.getSelection();
+      let cursorOffset = 0;
+      let cursorNode = null;
+      
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        cursorNode = range.startContainer;
+        cursorOffset = range.startOffset;
+      }
+      
+      // Update content from other session
+      isSyncingFromSocketRef.current = true;
+      if (editorRef.current) {
+        editorRef.current.innerHTML = content;
+      }
+      currentVersionRef.current = version;
+      
+      // Restore cursor position (best effort)
+      try {
+        if (cursorNode && editorRef.current.contains(cursorNode)) {
+          const newRange = document.createRange();
+          const newSelection = window.getSelection();
+          newRange.setStart(cursorNode, Math.min(cursorOffset, cursorNode.length));
+          newRange.collapse(true);
+          newSelection.removeAllRanges();
+          newSelection.addRange(newRange);
+        }
+      } catch (e) {
+        // Cursor restoration failed, that's okay
+      }
+      
+      isSyncingFromSocketRef.current = false;
+    };
+
+    socket.on('note-sync', handleNoteSync);
+
+    return () => {
+      socket.off('note-sync', handleNoteSync);
+    };
+  }, [socket, connected, currentNote?._id]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -53,12 +125,16 @@ const RichTextEditor = forwardRef((props, ref) => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
+      // Leave note room on unmount
+      if (socket && currentNoteIdRef.current) {
+        socket.emit('leave-note', currentNoteIdRef.current);
+      }
     };
-  }, []);
+  }, [socket]);
 
   // Auto-save on content change (debounced)
   const handleContentChange = () => {
-    if (!currentNote) return;
+    if (!currentNote || isSyncingFromSocketRef.current) return;
 
     // Clear existing timeout
     if (saveTimeoutRef.current) {
@@ -73,8 +149,26 @@ const RichTextEditor = forwardRef((props, ref) => {
       isAutoSavingRef.current = true;
       setIsSaving(true);
       
-      // Use skipRefresh to prevent re-renders and cursor reset
-      await updateNote(currentNote._id, { content }, { skipRefresh: true });
+      // Include version and sessionId for conflict detection
+      const result = await updateNote(currentNote._id, { 
+        content,
+        version: currentVersionRef.current,
+        sessionId: sessionIdRef.current
+      }, { skipRefresh: true });
+      
+      // Handle version conflict
+      if (result?.success === false && result?.conflict) {
+        console.warn('Version conflict detected:', result);
+        // For now, accept the server version (last-write-wins)
+        // In future, could show a merge UI
+        if (editorRef.current && result.currentContent) {
+          editorRef.current.innerHTML = result.currentContent;
+          currentVersionRef.current = result.currentVersion;
+        }
+      } else if (result?.note) {
+        // Update version after successful save
+        currentVersionRef.current = result.note.version;
+      }
       
       setIsSaving(false);
       isAutoSavingRef.current = false;
@@ -273,38 +367,52 @@ const RichTextEditor = forwardRef((props, ref) => {
   };
 
   // Markdown-like shortcuts
-  const handleKeyUp = (e) => {
-    if (e.key === ' ') {
-      const selection = window.getSelection();
-      if (!selection.rangeCount) return;
-      
-      const focusNode = selection.focusNode;
-      if (focusNode.nodeType !== 3) return; // Text nodes only
+  const handleInput = (e) => {
+    // Check for markdown shortcuts after input
+    const selection = window.getSelection();
+    if (!selection.rangeCount) {
+      handleContentChange();
+      return;
+    }
+    
+    const focusNode = selection.focusNode;
+    if (focusNode.nodeType !== 3) {
+      handleContentChange();
+      return;
+    }
 
-      const text = focusNode.textContent;
-      const patterns = [
-        { match: /^#\s$/, format: 'h1' },
-        { match: /^##\s$/, format: 'h2' },
-        { match: /^###\s$/, format: 'h3' },
-        { match: /^-\s$/, format: 'insertUnorderedList' },
-        { match: /^\*\s$/, format: 'insertUnorderedList' },
-        { match: /^1\.\s$/, format: 'insertOrderedList' },
-        { match: /^>\s$/, format: 'formatBlock', param: 'blockquote' },
-        { match: /^```\s$/, format: 'formatBlock', param: 'pre' }
-      ];
+    const text = focusNode.textContent;
+    const patterns = [
+      { match: /^#\s$/, format: 'h1', removeChars: 2 },
+      { match: /^##\s$/, format: 'h2', removeChars: 3 },
+      { match: /^###\s$/, format: 'h3', removeChars: 4 },
+      { match: /^-\s$/, format: 'insertUnorderedList', removeChars: 2 },
+      { match: /^\*\s$/, format: 'insertUnorderedList', removeChars: 2 },
+      { match: /^1\.\s$/, format: 'insertOrderedList', removeChars: 3 },
+      { match: /^>\s$/, format: 'formatBlock', param: 'blockquote', removeChars: 2 },
+      { match: /^```\s$/, format: 'formatBlock', param: 'pre', removeChars: 4 }
+    ];
 
-      for (let p of patterns) {
-        const normalizedText = text.replace(/\u00A0/g, ' ');
-        if (p.match.test(normalizedText)) {
-          document.execCommand('delete', false, null);
-          if (p.format === 'formatBlock') {
-            document.execCommand(p.format, false, p.param);
-          } else {
-            document.execCommand(p.format, false, null);
-          }
-          e.preventDefault();
-          break;
+    for (let p of patterns) {
+      const normalizedText = text.replace(/\u00A0/g, ' ');
+      if (p.match.test(normalizedText)) {
+        e.preventDefault();
+        
+        // Remove the markdown characters
+        const range = document.createRange();
+        range.setStart(focusNode, 0);
+        range.setEnd(focusNode, p.removeChars);
+        range.deleteContents();
+        
+        // Apply the formatting
+        if (p.format === 'formatBlock') {
+          document.execCommand(p.format, false, p.param);
+        } else {
+          document.execCommand(p.format, false, null);
         }
+        
+        handleContentChange();
+        return;
       }
     }
 
@@ -377,8 +485,7 @@ const RichTextEditor = forwardRef((props, ref) => {
         className="w-full h-full overflow-y-auto bg-transparent focus:outline-none text-gray-300 p-8 text-md font-light leading-relaxed empty:before:content-[attr(placeholder)] empty:before:text-gray-600"
         placeholder={currentNote ? "Type '# ' for Heading, '- ' for list, or select text to format..." : "Select a note to start editing"}
         onKeyDown={handleKeyDown}
-        onKeyUp={handleKeyUp}
-        onInput={handleContentChange}
+        onInput={handleInput}
         onPaste={handlePaste}
         onDrop={handleDrop}
         onDragOver={handleDragOver}

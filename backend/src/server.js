@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createServer } from 'http';
 
 import './config/passport.js'; 
 import passport from 'passport';
@@ -16,9 +17,17 @@ import uploadRoutes from './routes/uploadRoutes.js';
 import { connectDB } from './config/db.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 import ratelimiter from './middleware/rateLimiter.js';
+import { setupSocket } from './config/socket.js';
+import { setIO } from './controllers/noteController.js';
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// Setup Socket.IO
+export const io = setupSocket(server);
+// Pass io instance to controllers for real-time updates
+setIO(io);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -111,8 +120,9 @@ app.use(errorHandler);
 
 // Connect to DB and start server
 connectDB().then(() => {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server is running on PORT:${PORT}`);
+    console.log(`WebSocket server ready`);
     console.log(`Google OAuth: ${process.env.GOOGLE_CLIENT_ID ? 'Configured' : '⚠️  Not configured'}`);
   });
 });

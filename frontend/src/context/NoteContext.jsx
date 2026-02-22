@@ -243,7 +243,14 @@ export const NoteProvider = ({ children }) => {
   const updateNote = async (noteId, noteData, options = {}) => {
     const { skipRefresh = false } = options;
     try {
-      const updatedNote = await noteService.updateNote(noteId, noteData);
+      const result = await noteService.updateNote(noteId, noteData);
+      
+      // Check if it's a conflict response
+      if (result.conflict) {
+        return result;
+      }
+      
+      const updatedNote = result;
       
       // Skip full refresh for content-only updates (auto-save)
       // This prevents cursor reset and unnecessary re-renders

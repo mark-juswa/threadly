@@ -76,8 +76,20 @@ export const noteService = {
   },
 
   updateNote: async (noteId, noteData) => {
-    const response = await api.put(`/api/notes/${noteId}`, noteData);
-    return response.data;
+    try {
+      const response = await api.put(`/api/notes/${noteId}`, noteData);
+      return response.data;
+    } catch (error) {
+      // Handle conflict errors (409)
+      if (error.response?.status === 409) {
+        return {
+          success: false,
+          conflict: true,
+          ...error.response.data
+        };
+      }
+      throw error;
+    }
   },
 
   deleteNote: async (noteId) => {
