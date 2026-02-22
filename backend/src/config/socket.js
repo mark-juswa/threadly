@@ -29,20 +29,42 @@ export const setupSocket = (server) => {
       const token = cookies.jwt;
       
       if (!token) {
+        console.error('Socket auth failed: No JWT cookie found');
         return next(new Error('Authentication required'));
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id).select('-password');
+      // Verify token with same options as REST API
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+        issuer: 'notes-app',
+        audience: 'notes-app-users',
+      });
+
+      // Validate token has required claims (matches authMiddleware.js)
+      if (!decoded.userId) {
+        console.error('Socket auth failed: Token missing userId claim');
+        return next(new Error('Invalid token format'));
+      }
+
+      // Find user by userId (not id)
+      const user = await User.findById(decoded.userId).select('-password');
 
       if (!user) {
+        console.error('Socket auth failed: User not found for ID:', decoded.userId);
         return next(new Error('User not found'));
+      }
+
+      // Check if user account is active
+      if (user.isActive === false) {
+        console.error('Socket auth failed: User account deactivated');
+        return next(new Error('Account deactivated'));
       }
 
       socket.userId = user._id.toString();
       socket.user = user;
+      console.log(`Socket authenticated successfully for user: ${socket.userId}`);
       next();
     } catch (error) {
+      console.error('Socket authentication error:', error.message);
       next(new Error('Authentication failed'));
     }
   });
