@@ -1,3 +1,11 @@
+# 🐛 Cursor Reset Fix - Complete Solution
+
+## ⚠️ The Real Root Cause (Found on 2nd Investigation)
+
+The first fix (removing `currentNote?.content` from useEffect dependencies) was only **part of the solution**. The cursor was still jumping because of a **second issue** in NoteContext.
+
+---
+
 # 🐛 Cursor Reset Fix - Root Cause Analysis
 
 ## 🔴 Critical Bug: Cursor Jumping on Auto-Save
@@ -129,6 +137,62 @@ We **never** want to update the editor's HTML just because the content was auto-
 - ✅ Auto-save still happens every 1 second
 - ✅ Content is saved to database
 - ✅ Multi-tab sync continues to work
+
+---
+
+## 🔴 The Second Issue (NoteContext.jsx Line 323)
+
+### The Problem
+
+```javascript
+// In updateNote function
+const updatedNote = result;
+
+if (currentNote?._id === noteId) {
+  setCurrentNote(updatedNote);  // ❌ ALWAYS called, even during auto-save!
+}
+```
+
+**What was happening:**
+1. Auto-save completes → Returns `updatedNote` from server
+2. `setCurrentNote(updatedNote)` called with **new object reference**
+3. React sees `currentNote` changed → **Re-renders all components** using it
+4. RichTextEditor re-renders → Even though we fixed the useEffect, the **component itself re-renders**
+5. **Cursor position lost!** 💥
+
+### The Fix
+
+```javascript
+if (!skipRefresh) {
+  // Full refresh - update everything including currentNote
+  await fetchAllNotes();
+  if (currentNote?._id === noteId) {
+    setCurrentNote(updatedNote);  // ✅ Only for non-auto-save updates
+  }
+} else {
+  // Auto-save mode: DON'T update currentNote to prevent re-render
+  // The editor already has the latest content (user is typing it)
+  // Just update the cached version in topics array
+  setTopics(prevTopics => { /* ... */ });
+}
+```
+
+**Why this works:**
+- During auto-save (`skipRefresh: true`): **Don't call `setCurrentNote`** → No re-render!
+- The editor already has the content (user typed it)
+- We only update the `topics` cache for later use
+- When switching notes, `fetchAllNotes()` will load fresh data
+
+---
+
+## 📊 Complete Fix Summary
+
+| Issue | Location | Problem | Solution |
+|-------|----------|---------|----------|
+| **Issue #1** | RichTextEditor.jsx:66 | `currentNote?.content` in useEffect deps | Remove it - only depend on `_id` |
+| **Issue #2** | NoteContext.jsx:323 | `setCurrentNote` called during auto-save | Only call it when `skipRefresh: false` |
+
+**Both fixes were necessary!**
 
 ---
 

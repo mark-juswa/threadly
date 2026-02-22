@@ -318,18 +318,20 @@ export const NoteProvider = ({ children }) => {
       
       const updatedNote = result;
       
-      // ALWAYS update the currentNote cache with latest data from server
-      // This ensures when switching back to a note, we have fresh content
-      if (currentNote?._id === noteId) {
-        setCurrentNote(updatedNote);
-      }
-      
       // Skip full hierarchy refresh for content-only updates (auto-save)
       // This prevents cursor reset and unnecessary re-renders
       if (!skipRefresh) {
+        // Full refresh - update everything including currentNote
         await fetchAllNotes();
+        
+        // Update currentNote for non-auto-save updates (e.g., title changes)
+        if (currentNote?._id === noteId) {
+          setCurrentNote(updatedNote);
+        }
       } else {
-        // Even when skipping full refresh, update the note in topics array
+        // Auto-save mode: DON'T update currentNote to prevent re-render
+        // The editor already has the latest content (user is typing it)
+        // Just update the cached version in topics array for when we switch back
         setTopics(prevTopics => {
           return prevTopics.map(topic => {
             // Helper to update note recursively
