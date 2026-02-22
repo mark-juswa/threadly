@@ -64,7 +64,7 @@ const RichTextEditor = forwardRef((props, ref) => {
         editorRef.current.innerHTML = '';
       }
     }
-  }, [currentNote?._id, currentNote?.content, socket, connected]);
+  }, [currentNote?._id, socket, connected]); // ✅ REMOVED currentNote?.content - only react to ID changes!
 
   // Socket listener for real-time sync from other sessions
   useEffect(() => {
