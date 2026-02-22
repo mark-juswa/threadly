@@ -521,31 +521,46 @@ const RichTextEditor = forwardRef((props, ref) => {
       const imageUrl = uploadService.getImageUrl(result.imageUrl);
       console.log('Image URL:', imageUrl);
       
+      // Remove from tracking IMMEDIATELY (before DOM manipulation)
+      setUploadingImages(prev => {
+        const next = new Map(prev);
+        next.delete(tempId);
+        return next;
+      });
+      
       // Replace placeholder with real image
       const placeholder = document.getElementById(tempId);
       console.log('Placeholder found:', placeholder);
+      console.log('Placeholder parent:', placeholder?.parentElement);
+      console.log('Is in editor:', placeholder ? editorRef.current?.contains(placeholder) : false);
       
       if (placeholder && editorRef.current?.contains(placeholder)) {
-        const imgHtml = `<img src="${imageUrl}" onclick="window.expandImage(this)" class="max-w-[80%] max-h-[400px] object-contain rounded-lg my-4 shadow-lg block cursor-zoom-in hover:opacity-90 transition" />`;
-        placeholder.outerHTML = imgHtml;
-        console.log('Placeholder replaced with real image');
+        // Revoke blob URL to free memory
+        const oldImg = placeholder.querySelector('img');
+        if (oldImg && oldImg.src.startsWith('blob:')) {
+          URL.revokeObjectURL(oldImg.src);
+        }
+        
+        // Create new image element (more reliable than outerHTML)
+        const newImg = document.createElement('img');
+        newImg.src = imageUrl;
+        newImg.onclick = () => window.expandImage(newImg);
+        newImg.className = 'max-w-[80%] max-h-[400px] object-contain rounded-lg my-4 shadow-lg block cursor-zoom-in hover:opacity-90 transition';
+        
+        // Replace placeholder with new image
+        placeholder.replaceWith(newImg);
+        console.log('Placeholder replaced with real image using replaceWith()');
         
         // Small delay before triggering save to ensure DOM is updated
         setTimeout(() => {
           handleContentChange();
         }, 100);
       } else {
-        console.warn('Placeholder not found or not in editor');
+        console.warn('❌ Placeholder not found or not in editor');
         console.warn('Editor current:', editorRef.current);
         console.warn('Temp ID:', tempId);
+        console.warn('All elements with temp ID:', document.querySelectorAll(`[id^="temp-"]`));
       }
-      
-      // Remove from tracking
-      setUploadingImages(prev => {
-        const next = new Map(prev);
-        next.delete(tempId);
-        return next;
-      });
       
       console.log('Upload complete!');
       
@@ -556,6 +571,11 @@ const RichTextEditor = forwardRef((props, ref) => {
       // Remove placeholder on error
       const placeholder = document.getElementById(tempId);
       if (placeholder) {
+        // Revoke blob URL to free memory
+        const oldImg = placeholder.querySelector('img');
+        if (oldImg && oldImg.src.startsWith('blob:')) {
+          URL.revokeObjectURL(oldImg.src);
+        }
         placeholder.remove();
       }
       
