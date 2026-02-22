@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect } from 'react';
 import { noteService } from '../api/noteService';
+import { useSocket } from './SocketContext';
 
 export const NoteContext = createContext();
 
@@ -9,11 +10,76 @@ export const NoteProvider = ({ children }) => {
   const [currentCategory, setCurrentCategory] = useState(null);
   const [currentNote, setCurrentNote] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { socket, connected } = useSocket();
 
   // Fetch all notes hierarchy on mount
   useEffect(() => {
     fetchAllNotes();
   }, []);
+
+  // Listen for WebSocket note updates to keep cache fresh
+  useEffect(() => {
+    if (!socket || !connected) return;
+
+    const handleNoteSyncForCache = (data) => {
+      const { noteId, content, version } = data;
+      
+      // Update the note in topics cache (without triggering re-render if not viewing)
+      setTopics(prevTopics => {
+        return prevTopics.map(topic => {
+          const updateNoteInStructure = (structure) => {
+            if (structure.notes) {
+              structure.notes = structure.notes.map(n => 
+                n._id === noteId ? { ...n, content, version, updatedAt: new Date().toISOString() } : n
+              );
+            }
+            if (structure.categories) {
+              structure.categories = structure.categories.map(cat => {
+                const updated = { ...cat };
+                if (updated.notes) {
+                  updated.notes = updated.notes.map(n => 
+                    n._id === noteId ? { ...n, content, version, updatedAt: new Date().toISOString() } : n
+                  );
+                }
+                if (updated.groups) {
+                  updated.groups = updated.groups.map(updateNoteInStructure);
+                }
+                return updated;
+              });
+            }
+            if (structure.groups) {
+              structure.groups = structure.groups.map(updateNoteInStructure);
+            }
+            if (structure.subgroups) {
+              structure.subgroups = structure.subgroups.map(updateNoteInStructure);
+            }
+            if (structure.orphanNotes) {
+              structure.orphanNotes = structure.orphanNotes.map(n => 
+                n._id === noteId ? { ...n, content, version, updatedAt: new Date().toISOString() } : n
+              );
+            }
+            return structure;
+          };
+          
+          return updateNoteInStructure({ ...topic });
+        });
+      });
+
+      // Also update currentNote if it's the one being synced (and we're not viewing it)
+      setCurrentNote(prev => {
+        if (prev && prev._id === noteId) {
+          return { ...prev, content, version, updatedAt: new Date().toISOString() };
+        }
+        return prev;
+      });
+    };
+
+    socket.on('note-sync', handleNoteSyncForCache);
+
+    return () => {
+      socket.off('note-sync', handleNoteSyncForCache);
+    };
+  }, [socket, connected]);
 
   const fetchAllNotes = async () => {
     try {
@@ -252,16 +318,58 @@ export const NoteProvider = ({ children }) => {
       
       const updatedNote = result;
       
-      // Skip full refresh for content-only updates (auto-save)
+      // ALWAYS update the currentNote cache with latest data from server
+      // This ensures when switching back to a note, we have fresh content
+      if (currentNote?._id === noteId) {
+        setCurrentNote(updatedNote);
+      }
+      
+      // Skip full hierarchy refresh for content-only updates (auto-save)
       // This prevents cursor reset and unnecessary re-renders
       if (!skipRefresh) {
         await fetchAllNotes();
-      }
-      
-      // Only update currentNote state if we're not skipping refresh
-      // For auto-save, we don't want to trigger re-renders
-      if (currentNote?._id === noteId && !skipRefresh) {
-        setCurrentNote(updatedNote);
+      } else {
+        // Even when skipping full refresh, update the note in topics array
+        setTopics(prevTopics => {
+          return prevTopics.map(topic => {
+            // Helper to update note recursively
+            const updateNoteInStructure = (structure) => {
+              if (structure.notes) {
+                structure.notes = structure.notes.map(n => 
+                  n._id === noteId ? updatedNote : n
+                );
+              }
+              if (structure.categories) {
+                structure.categories = structure.categories.map(cat => {
+                  const updated = { ...cat };
+                  if (updated.notes) {
+                    updated.notes = updated.notes.map(n => 
+                      n._id === noteId ? updatedNote : n
+                    );
+                  }
+                  if (updated.groups) {
+                    updated.groups = updated.groups.map(updateNoteInStructure);
+                  }
+                  return updated;
+                });
+              }
+              if (structure.groups) {
+                structure.groups = structure.groups.map(updateNoteInStructure);
+              }
+              if (structure.subgroups) {
+                structure.subgroups = structure.subgroups.map(updateNoteInStructure);
+              }
+              if (structure.orphanNotes) {
+                structure.orphanNotes = structure.orphanNotes.map(n => 
+                  n._id === noteId ? updatedNote : n
+                );
+              }
+              return structure;
+            };
+            
+            return updateNoteInStructure({ ...topic });
+          });
+        });
       }
       
       return { success: true, note: updatedNote };

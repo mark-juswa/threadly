@@ -3,6 +3,7 @@ import { useNotes } from '../../hooks/useNotes';
 import { uploadService } from '../../api/uploadService';
 import { useSocket } from '../../context/SocketContext';
 import { v4 as uuidv4 } from 'uuid';
+import imageCompression from 'browser-image-compression';
 
 const RichTextEditor = forwardRef((props, ref) => {
   const editorRef = useRef(null);
@@ -28,6 +29,7 @@ const RichTextEditor = forwardRef((props, ref) => {
   }, [ref, currentNote?._id]); // Only re-sync when note ID changes
   
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(new Map()); // Track uploading images
   const saveTimeoutRef = useRef(null);
 
   // Load current note content - ONLY when note ID changes
@@ -425,30 +427,77 @@ const RichTextEditor = forwardRef((props, ref) => {
     handleContentChange();
   };
 
+  // Shared image upload handler with compression and optimistic UI
+  const uploadImage = async (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    try {
+      const tempId = `temp-${uuidv4()}`;
+      
+      // Compress image before upload (especially important for Render free tier)
+      const options = {
+        maxSizeMB: 1, // Max 1MB
+        maxWidthOrHeight: 1920, // Max dimension
+        useWebWorker: true,
+        fileType: file.type
+      };
+      
+      const compressedFile = await imageCompression(file, options);
+      console.log(`Image compressed: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+      
+      // Create optimistic placeholder with loading state
+      const placeholderHtml = `<div id="${tempId}" class="relative inline-block my-4">
+        <img src="${URL.createObjectURL(compressedFile)}" class="max-w-[80%] max-h-[400px] object-contain rounded-lg shadow-lg block opacity-50 blur-sm" />
+        <div class="absolute inset-0 flex items-center justify-center">
+          <div class="bg-gray-800/90 text-gray-200 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Uploading...
+          </div>
+        </div>
+      </div>`;
+      
+      // Insert placeholder immediately
+      document.execCommand('insertHTML', false, placeholderHtml);
+      handleContentChange();
+      
+      // Track upload
+      setUploadingImages(prev => new Map(prev).set(tempId, true));
+      
+      // Upload to backend
+      const result = await uploadService.uploadImage(compressedFile);
+      const imageUrl = uploadService.getImageUrl(result.imageUrl);
+      
+      // Replace placeholder with real image
+      const placeholder = document.getElementById(tempId);
+      if (placeholder && editorRef.current.contains(placeholder)) {
+        const imgHtml = `<img src="${imageUrl}" onclick="window.expandImage(this)" class="max-w-[80%] max-h-[400px] object-contain rounded-lg my-4 shadow-lg block cursor-zoom-in hover:opacity-90 transition" />`;
+        placeholder.outerHTML = imgHtml;
+        handleContentChange();
+      }
+      
+      // Remove from tracking
+      setUploadingImages(prev => {
+        const next = new Map(prev);
+        next.delete(tempId);
+        return next;
+      });
+      
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      alert('Failed to upload image. Please try again.');
+    }
+  };
+
   // Drag and drop image upload
   const handleDrop = async (e) => {
     e.preventDefault();
     editorRef.current.classList.remove('bg-gray-900/50');
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      
-      if (file.type.startsWith('image/')) {
-        try {
-          // Upload to backend
-          const result = await uploadService.uploadImage(file);
-          const imageUrl = uploadService.getImageUrl(result.imageUrl);
-
-          // Insert image into editor
-          const imgHtml = `<img src="${imageUrl}" onclick="window.expandImage(this)" class="max-w-[80%] max-h-[400px] object-contain rounded-lg my-4 shadow-lg block cursor-zoom-in hover:opacity-90 transition" /><br>`;
-          document.execCommand('insertHTML', false, imgHtml);
-
-          handleContentChange();
-        } catch (error) {
-          console.error('Failed to upload image:', error);
-          alert('Failed to upload image');
-        }
-      }
+      await uploadImage(e.dataTransfer.files[0]);
     }
   };
 
@@ -462,13 +511,34 @@ const RichTextEditor = forwardRef((props, ref) => {
     editorRef.current.classList.remove('bg-gray-900/50');
   };
 
-  // Handle paste to strip external formatting
-  const handlePaste = (e) => {
+  // Handle paste to support both text and images
+  const handlePaste = async (e) => {
     e.preventDefault();
     
-    // Get plain text from clipboard
-    const text = e.clipboardData.getData('text/plain');
+    // Check for image in clipboard first
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
     
+    if (imageItem) {
+      // Handle image paste (from Snipping Tool, screenshots, etc.)
+      const file = imageItem.getAsFile();
+      if (file) {
+        await uploadImage(file);
+      }
+      return;
+    }
+    
+    // Check for image files
+    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+      const file = e.clipboardData.files[0];
+      if (file.type.startsWith('image/')) {
+        await uploadImage(file);
+        return;
+      }
+    }
+    
+    // Otherwise, handle text paste (strip formatting)
+    const text = e.clipboardData.getData('text/plain');
     if (text) {
       // Insert plain text at cursor position
       document.execCommand('insertText', false, text);
