@@ -486,21 +486,38 @@ const RichTextEditor = forwardRef((props, ref) => {
       
       // Insert placeholder immediately
       document.execCommand('insertHTML', false, placeholderHtml);
-      handleContentChange();
       
-      // Track upload
+      // Track upload (before triggering content change to prevent race conditions)
       setUploadingImages(prev => new Map(prev).set(tempId, true));
       
+      // Trigger save with the placeholder (but this shouldn't interfere with replacement)
+      handleContentChange();
+      
       // Upload to backend
+      console.log('Starting upload to backend...');
       const result = await uploadService.uploadImage(compressedFile);
+      console.log('Upload result:', result);
+      
       const imageUrl = uploadService.getImageUrl(result.imageUrl);
+      console.log('Image URL:', imageUrl);
       
       // Replace placeholder with real image
       const placeholder = document.getElementById(tempId);
-      if (placeholder && editorRef.current.contains(placeholder)) {
+      console.log('Placeholder found:', placeholder);
+      
+      if (placeholder && editorRef.current?.contains(placeholder)) {
         const imgHtml = `<img src="${imageUrl}" onclick="window.expandImage(this)" class="max-w-[80%] max-h-[400px] object-contain rounded-lg my-4 shadow-lg block cursor-zoom-in hover:opacity-90 transition" />`;
         placeholder.outerHTML = imgHtml;
-        handleContentChange();
+        console.log('Placeholder replaced with real image');
+        
+        // Small delay before triggering save to ensure DOM is updated
+        setTimeout(() => {
+          handleContentChange();
+        }, 100);
+      } else {
+        console.warn('Placeholder not found or not in editor');
+        console.warn('Editor current:', editorRef.current);
+        console.warn('Temp ID:', tempId);
       }
       
       // Remove from tracking
@@ -510,9 +527,26 @@ const RichTextEditor = forwardRef((props, ref) => {
         return next;
       });
       
+      console.log('Upload complete!');
+      
     } catch (error) {
       console.error('Failed to upload image:', error);
-      alert('Failed to upload image. Please try again.');
+      console.error('Error details:', error.response?.data || error.message);
+      
+      // Remove placeholder on error
+      const placeholder = document.getElementById(tempId);
+      if (placeholder) {
+        placeholder.remove();
+      }
+      
+      // Remove from tracking
+      setUploadingImages(prev => {
+        const next = new Map(prev);
+        next.delete(tempId);
+        return next;
+      });
+      
+      alert(`Failed to upload image: ${error.response?.data?.message || error.message}`);
     }
   };
 

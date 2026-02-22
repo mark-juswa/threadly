@@ -140,6 +140,33 @@ Now clipboard images get names like: `clipboard-1707234567890.png`
 
 ---
 
+## 🐛 Critical Fix - Image Upload Stuck on "Uploading..."
+
+### The Issue
+When pasting images, the upload shows "Uploading..." but never completes. The image stays blurred indefinitely.
+
+### Root Causes
+1. **DOM Timing Race Condition**: Auto-save (triggered by `handleContentChange()`) was running before the placeholder could be tracked, sometimes removing or replacing it.
+2. **Missing Error Visibility**: Errors were only logged to console, not visible to users.
+3. **No Cleanup on Failure**: Failed uploads left stuck placeholders.
+
+### Solutions Applied
+1. ✅ **Fixed Upload Tracking Order**: Track upload state BEFORE triggering save
+2. ✅ **Added 100ms Delay**: Small delay before save after image replacement ensures DOM is stable
+3. ✅ **Comprehensive Logging**: Console logs show each step (compression → upload → replace)
+4. ✅ **Error Handling**: Clear error messages, automatic placeholder cleanup on failure
+5. ✅ **Better Debugging**: Detailed logs help identify exactly where uploads fail
+
+### How to Debug
+See `IMAGE_UPLOAD_DEBUG.md` for complete debugging guide.
+
+**Quick test:**
+1. Open browser console (F12)
+2. Paste image (Ctrl+V)
+3. Watch console logs - should show all steps completing successfully
+
+---
+
 ## 🧪 How to Test
 
 ### Test 1: Note Switching with Real-Time Sync
