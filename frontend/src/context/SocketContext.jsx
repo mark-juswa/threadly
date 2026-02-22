@@ -31,12 +31,23 @@ export const SocketProvider = ({ children }) => {
     }
 
     // Create socket connection (authentication via httpOnly cookie)
-    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+    // Use same URL logic as API (same origin in production, localhost in dev)
+    const getSocketURL = () => {
+      if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+      if (import.meta.env.PROD) return window.location.origin; // Same origin in production
+      return 'http://localhost:5000'; // Development fallback
+    };
+    
+    const socketUrl = getSocketURL();
+    console.log('Connecting to WebSocket:', socketUrl);
+    
+    const newSocket = io(socketUrl, {
       withCredentials: true, // Important: Send cookies with socket connection
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      reconnectionAttempts: maxReconnectAttempts
+      reconnectionAttempts: maxReconnectAttempts,
+      transports: ['websocket', 'polling'] // Try WebSocket first, fallback to polling
     });
 
     newSocket.on('connect', () => {

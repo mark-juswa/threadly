@@ -11,9 +11,10 @@ export const setupSocket = (server) => {
         'http://127.0.0.1:5173',
         'http://localhost:5000',
         'http://127.0.0.1:5000',
+        'https://threadifyy.onrender.com' // Production frontend URL
       ],
       credentials: true,
-      methods: ['GET', 'POST']
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
     }
   });
 
