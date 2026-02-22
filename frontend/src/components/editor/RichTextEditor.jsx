@@ -535,12 +535,6 @@ const RichTextEditor = forwardRef((props, ref) => {
       console.log('Is in editor:', placeholder ? editorRef.current?.contains(placeholder) : false);
       
       if (placeholder && editorRef.current?.contains(placeholder)) {
-        // Revoke blob URL to free memory
-        const oldImg = placeholder.querySelector('img');
-        if (oldImg && oldImg.src.startsWith('blob:')) {
-          URL.revokeObjectURL(oldImg.src);
-        }
-        
         // Create new image element (more reliable than outerHTML)
         const newImg = document.createElement('img');
         newImg.src = imageUrl;
@@ -550,6 +544,15 @@ const RichTextEditor = forwardRef((props, ref) => {
         // Replace placeholder with new image
         placeholder.replaceWith(newImg);
         console.log('Placeholder replaced with real image using replaceWith()');
+        
+        // Revoke blob URL AFTER replacement to prevent WebSocket sync issues
+        // The blob URL needs to exist until the content is saved and synced
+        setTimeout(() => {
+          const oldImg = document.querySelector(`img[src^="blob:"]`);
+          if (oldImg && oldImg.src.startsWith('blob:')) {
+            URL.revokeObjectURL(oldImg.src);
+          }
+        }, 2000); // 2 second delay to ensure sync completes
         
         // Small delay before triggering save to ensure DOM is updated
         setTimeout(() => {
@@ -571,12 +574,16 @@ const RichTextEditor = forwardRef((props, ref) => {
       // Remove placeholder on error
       const placeholder = document.getElementById(tempId);
       if (placeholder) {
-        // Revoke blob URL to free memory
-        const oldImg = placeholder.querySelector('img');
-        if (oldImg && oldImg.src.startsWith('blob:')) {
-          URL.revokeObjectURL(oldImg.src);
-        }
         placeholder.remove();
+        // Clean up blob URL after removal
+        setTimeout(() => {
+          const blobImgs = document.querySelectorAll('img[src^="blob:"]');
+          blobImgs.forEach(img => {
+            if (!document.contains(img)) {
+              URL.revokeObjectURL(img.src);
+            }
+          });
+        }, 100);
       }
       
       // Remove from tracking
