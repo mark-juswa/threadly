@@ -470,9 +470,15 @@ const RichTextEditor = forwardRef((props, ref) => {
       
       console.log(`Image compressed: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
       
+      // Create blob URL for preview
+      const blobUrl = URL.createObjectURL(compressedFile);
+      
       // Create optimistic placeholder with loading state
-      const placeholderHtml = `<div id="${tempId}" class="relative inline-block my-4">
-        <img src="${URL.createObjectURL(compressedFile)}" class="max-w-[80%] max-h-[400px] object-contain rounded-lg shadow-lg block opacity-50 blur-sm" />
+      const placeholderDiv = document.createElement('div');
+      placeholderDiv.id = tempId;
+      placeholderDiv.className = 'relative inline-block my-4';
+      placeholderDiv.innerHTML = `
+        <img src="${blobUrl}" class="max-w-[80%] max-h-[400px] object-contain rounded-lg shadow-lg block opacity-50 blur-sm" />
         <div class="absolute inset-0 flex items-center justify-center">
           <div class="bg-gray-800/90 text-gray-200 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
             <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -482,10 +488,24 @@ const RichTextEditor = forwardRef((props, ref) => {
             Uploading...
           </div>
         </div>
-      </div>`;
+      `;
       
-      // Insert placeholder immediately
-      document.execCommand('insertHTML', false, placeholderHtml);
+      // Insert placeholder at cursor position
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(placeholderDiv);
+        
+        // Move cursor after the placeholder
+        range.setStartAfter(placeholderDiv);
+        range.setEndAfter(placeholderDiv);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else {
+        // Fallback: append to editor
+        editorRef.current?.appendChild(placeholderDiv);
+      }
       
       // Track upload (before triggering content change to prevent race conditions)
       setUploadingImages(prev => new Map(prev).set(tempId, true));
