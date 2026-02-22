@@ -65,13 +65,10 @@ export const NoteProvider = ({ children }) => {
         });
       });
 
-      // Also update currentNote if it's the one being synced (and we're not viewing it)
-      setCurrentNote(prev => {
-        if (prev && prev._id === noteId) {
-          return { ...prev, content, version, updatedAt: new Date().toISOString() };
-        }
-        return prev;
-      });
+      // DON'T update currentNote here - it causes unnecessary re-renders
+      // The editor already has the latest content (from typing or from RichTextEditor's socket listener)
+      // We only need to update the topics cache above
+      // When switching notes, fetchAllNotes() will load fresh data
     };
 
     socket.on('note-sync', handleNoteSyncForCache);
