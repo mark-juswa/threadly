@@ -96,6 +96,50 @@ Success state: Full quality image, clickable to zoom
 
 ---
 
+## 🐛 Critical Bug Fix - Image Paste Error
+
+### The Error
+```
+Failed to load resource: the server responded with a status of 500
+API Error: Only image files are allowed (jpeg, jpg, png, gif, webp)
+```
+
+### Root Cause
+When pasting images from clipboard (Snipping Tool, screenshots), the File object has **no `.name` property**. The backend's multer fileFilter requires both a valid file extension AND MIME type. Without a filename, validation failed.
+
+### Solution
+- ✅ Added MIME type → extension mapping
+- ✅ Generate filename for clipboard images: `clipboard-{timestamp}.png`
+- ✅ Properly create File object with name and type
+- ✅ Works with all clipboard sources (Snipping Tool, PrtScn, etc.)
+
+### Technical Details
+
+**What happens when you paste from clipboard:**
+1. Browser creates File object without `.name` property
+2. Backend multer requires both filename extension AND MIME type
+3. Validation fails without proper filename
+
+**Fix applied:**
+```javascript
+// Generate proper filename with extension
+const getFileExtension = (mimeType) => {
+  const map = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp'
+  };
+  return map[mimeType] || 'png';
+};
+
+const fileName = file.name || `clipboard-${Date.now()}.${getFileExtension(file.type)}`;
+```
+
+Now clipboard images get names like: `clipboard-1707234567890.png`
+
+---
+
 ## 🧪 How to Test
 
 ### Test 1: Note Switching with Real-Time Sync

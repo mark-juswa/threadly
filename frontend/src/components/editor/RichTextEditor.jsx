@@ -442,7 +442,32 @@ const RichTextEditor = forwardRef((props, ref) => {
         fileType: file.type
       };
       
-      const compressedFile = await imageCompression(file, options);
+      const compressedBlob = await imageCompression(file, options);
+      
+      // Create a new File object with proper name and type
+      // This ensures multer's fileFilter recognizes it correctly
+      // Handle clipboard images which may not have a name
+      const getFileExtension = (mimeType) => {
+        const map = {
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/png': 'png',
+          'image/gif': 'gif',
+          'image/webp': 'webp'
+        };
+        return map[mimeType] || 'png';
+      };
+      
+      const fileName = file.name || `clipboard-${Date.now()}.${getFileExtension(file.type)}`;
+      const compressedFile = new File(
+        [compressedBlob], 
+        fileName,
+        { 
+          type: file.type || 'image/png',
+          lastModified: Date.now()
+        }
+      );
+      
       console.log(`Image compressed: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
       
       // Create optimistic placeholder with loading state
