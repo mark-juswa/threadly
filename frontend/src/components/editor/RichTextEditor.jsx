@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, forwardRef } from 'react';
+import { useEffect, useRef, forwardRef } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import { uploadService } from '../../api/uploadService';
 import { useSocket } from '../../context/SocketContext';
@@ -28,11 +28,17 @@ const RichTextEditor = forwardRef((props, ref) => {
     }
   }, [ref, currentNote?._id]); // Only re-sync when note ID changes
   
-  const [uploadingImages, setUploadingImages] = useState(new Map()); // Track uploading images
+  // Use a ref instead of state for tracking in-flight image uploads.
+  // State would trigger re-renders on every upload start/finish, which disturbs the cursor.
+  const uploadingImagesRef = useRef(new Map());
   const saveTimeoutRef = useRef(null);
   const savingIndicatorRef = useRef(null); // Ref to the saving indicator DOM node (avoids re-render)
 
-  // Load current note content - ONLY when note ID changes
+  // Load current note content - ONLY when the note ID changes.
+  // socket and connected are intentionally excluded from the dependency array:
+  // including them would cause this effect to re-fire on every socket reconnect
+  // (common on Render's free tier), which would reset innerHTML and jump the cursor.
+  // Socket room join/leave is handled by a separate dedicated effect below.
   useEffect(() => {
     const noteId = currentNote?._id || null;
     const previousNoteId = currentNoteIdRef.current;
@@ -48,23 +54,29 @@ const RichTextEditor = forwardRef((props, ref) => {
       currentNoteIdRef.current = noteId;
       currentVersionRef.current = currentNote?.version || 0;
       
-      // Leave previous note room and join new note room
-      if (socket && connected) {
-        if (previousNoteId) {
-          socket.emit('leave-note', previousNoteId);
-        }
-        if (noteId) {
-          socket.emit('join-note', noteId);
-        }
-      }
-      
       if (editorRef.current && currentNote) {
         editorRef.current.innerHTML = currentNote.content || '';
       } else if (editorRef.current) {
         editorRef.current.innerHTML = '';
       }
     }
-  }, [currentNote?._id, socket, connected]); // ✅ REMOVED currentNote?.content - only react to ID changes!
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentNote?._id]); // ← ONLY the note ID. socket/connected are handled separately.
+
+  // Manage socket room membership separately from content loading.
+  // This way socket reconnects never trigger an innerHTML reset.
+  useEffect(() => {
+    if (!socket || !connected) return;
+    const noteId = currentNoteIdRef.current;
+    if (noteId) {
+      socket.emit('join-note', noteId);
+    }
+    return () => {
+      if (noteId) {
+        socket.emit('leave-note', noteId);
+      }
+    };
+  }, [socket, connected]);
 
   // Socket listener for real-time sync from other sessions
   useEffect(() => {
@@ -166,57 +178,51 @@ const RichTextEditor = forwardRef((props, ref) => {
       isAutoSavingRef.current = true;
       showSavingIndicator(); // Direct DOM mutation — no React re-render
 
-      // Capture cursor position BEFORE the async save, so we can restore it if needed
-      const selection = window.getSelection();
-      let savedRange = null;
-      if (selection && selection.rangeCount > 0) {
-        try {
-          savedRange = selection.getRangeAt(0).cloneRange();
-        } catch (e) {
-          // Ignore — cursor save is best-effort
-        }
-      }
+      // IMPORTANT: Do NOT capture/restore the cursor here.
+      // The user keeps typing DURING the async HTTP request (which can take 500ms–2s on
+      // Render's free tier). If we save the cursor position before the await and restore
+      // it after, we actively move the cursor BACKWARD to where it was when the save
+      // started — which is exactly the bug. The browser naturally keeps the cursor in
+      // the right place as long as we do not touch the DOM or call setState.
+
+      // Snapshot the note ID so we can guard against note-switching mid-save
+      const savingNoteId = currentNote._id;
 
       // Include version and sessionId for conflict detection
-      const result = await updateNote(currentNote._id, {
+      const result = await updateNote(savingNoteId, {
         content,
         version: currentVersionRef.current,
         sessionId: sessionIdRef.current
       }, { skipRefresh: true });
+
+      // If user switched notes while save was in-flight, do nothing to the DOM
+      if (currentNoteIdRef.current !== savingNoteId) {
+        hideSavingIndicator();
+        isAutoSavingRef.current = false;
+        return;
+      }
 
       // Handle version conflict — only case where we must touch the DOM
       if (result?.conflict) {
         if (editorRef.current && result.currentContent) {
           editorRef.current.innerHTML = result.currentContent;
           currentVersionRef.current = result.currentVersion;
-          // Cursor is inherently lost here because we replaced content with a server version.
-          // Move cursor to end as a reasonable fallback.
-          const range = document.createRange();
-          const sel = window.getSelection();
-          range.selectNodeContents(editorRef.current);
-          range.collapse(false);
-          sel.removeAllRanges();
-          sel.addRange(range);
+          // Cursor is inherently lost here because we replaced content with the server
+          // version. Move cursor to end as a reasonable fallback.
+          try {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(editorRef.current);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          } catch (e) { /* ignore */ }
         }
       } else if (result?.note) {
-        // Successful save — update tracked version
+        // Successful save — just update the tracked version number.
+        // Do NOT touch the selection/cursor at all. The browser has kept
+        // it exactly where the user left it.
         currentVersionRef.current = result.note.version;
-
-        // Restore cursor if it was shifted by any React reconciliation side-effect.
-        // This is a safety net: in most cases the cursor will not have moved because
-        // we no longer call setState during auto-save.
-        if (savedRange && editorRef.current) {
-          try {
-            const sel = window.getSelection();
-            // Only restore if the editor still has focus and the selection looks wrong
-            if (document.activeElement === editorRef.current) {
-              sel.removeAllRanges();
-              sel.addRange(savedRange);
-            }
-          } catch (e) {
-            // Ignore — restoration is best-effort
-          }
-        }
       }
 
       hideSavingIndicator(); // Direct DOM mutation — no React re-render
@@ -545,8 +551,8 @@ const RichTextEditor = forwardRef((props, ref) => {
         editorRef.current?.appendChild(placeholderDiv);
       }
       
-      // Track upload (before triggering content change to prevent race conditions)
-      setUploadingImages(prev => new Map(prev).set(tempId, true));
+      // Track upload (ref-based — no React re-render)
+      uploadingImagesRef.current.set(tempId, true);
       
       // Trigger save with the placeholder (but this shouldn't interfere with replacement)
       handleContentChange();
@@ -559,12 +565,8 @@ const RichTextEditor = forwardRef((props, ref) => {
       const imageUrl = uploadService.getImageUrl(result.imageUrl);
       console.log('Image URL:', imageUrl);
       
-      // Remove from tracking IMMEDIATELY (before DOM manipulation)
-      setUploadingImages(prev => {
-        const next = new Map(prev);
-        next.delete(tempId);
-        return next;
-      });
+      // Remove from tracking IMMEDIATELY (before DOM manipulation — ref, no re-render)
+      uploadingImagesRef.current.delete(tempId);
       
       // Replace placeholder with real image
       const placeholder = document.getElementById(tempId);
@@ -624,12 +626,8 @@ const RichTextEditor = forwardRef((props, ref) => {
         }, 100);
       }
       
-      // Remove from tracking
-      setUploadingImages(prev => {
-        const next = new Map(prev);
-        next.delete(tempId);
-        return next;
-      });
+      // Remove from tracking (ref, no re-render)
+      uploadingImagesRef.current.delete(tempId);
       
       alert(`Failed to upload image: ${error.response?.data?.message || error.message}`);
     }
