@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect } from 'react';
+import { createContext, useState, useEffect, useRef } from 'react';
 import { noteService } from '../api/noteService';
 import { useSocket } from './SocketContext';
 
@@ -12,6 +12,19 @@ export const NoteProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const { socket, connected } = useSocket();
 
+  // A mutable ref that always mirrors the latest topics array.
+  // Used by updateNote (skipRefresh=true) to patch cached note data
+  // WITHOUT calling setTopics — which would re-render every context consumer
+  // and disturb the contentEditable cursor position.
+  const topicsRef = useRef(topics);
+
+  // Keep topicsRef in sync with topics state whenever it changes.
+  // This lets us read the latest topics imperatively (without stale closure issues)
+  // without needing to call setTopics during auto-save.
+  useEffect(() => {
+    topicsRef.current = topics;
+  }, [topics]);
+
   // Fetch all notes hierarchy on mount
   useEffect(() => {
     fetchAllNotes();
@@ -23,52 +36,37 @@ export const NoteProvider = ({ children }) => {
 
     const handleNoteSyncForCache = (data) => {
       const { noteId, content, version } = data;
-      
-      // Update the note in topics cache (without triggering re-render if not viewing)
-      setTopics(prevTopics => {
-        return prevTopics.map(topic => {
-          const updateNoteInStructure = (structure) => {
-            if (structure.notes) {
-              structure.notes = structure.notes.map(n => 
-                n._id === noteId ? { ...n, content, version, updatedAt: new Date().toISOString() } : n
-              );
-            }
-            if (structure.categories) {
-              structure.categories = structure.categories.map(cat => {
-                const updated = { ...cat };
-                if (updated.notes) {
-                  updated.notes = updated.notes.map(n => 
-                    n._id === noteId ? { ...n, content, version, updatedAt: new Date().toISOString() } : n
-                  );
-                }
-                if (updated.groups) {
-                  updated.groups = updated.groups.map(updateNoteInStructure);
-                }
-                return updated;
-              });
-            }
-            if (structure.groups) {
-              structure.groups = structure.groups.map(updateNoteInStructure);
-            }
-            if (structure.subgroups) {
-              structure.subgroups = structure.subgroups.map(updateNoteInStructure);
-            }
-            if (structure.orphanNotes) {
-              structure.orphanNotes = structure.orphanNotes.map(n => 
-                n._id === noteId ? { ...n, content, version, updatedAt: new Date().toISOString() } : n
-              );
-            }
-            return structure;
-          };
-          
-          return updateNoteInStructure({ ...topic });
-        });
-      });
 
-      // DON'T update currentNote here - it causes unnecessary re-renders
-      // The editor already has the latest content (from typing or from RichTextEditor's socket listener)
-      // We only need to update the topics cache above
-      // When switching notes, fetchAllNotes() will load fresh data
+      // Patch topicsRef.current in-place — same zero-re-render strategy as auto-save.
+      // The editor's own socket listener (in RichTextEditor) already updates the DOM;
+      // we just need to keep the cache fresh for note-switching without re-rendering.
+      const patchNote = (structure) => {
+        if (structure.notes) {
+          for (let i = 0; i < structure.notes.length; i++) {
+            if (structure.notes[i]._id === noteId) {
+              structure.notes[i] = { ...structure.notes[i], content, version, updatedAt: new Date().toISOString() };
+            }
+          }
+        }
+        if (structure.orphanNotes) {
+          for (let i = 0; i < structure.orphanNotes.length; i++) {
+            if (structure.orphanNotes[i]._id === noteId) {
+              structure.orphanNotes[i] = { ...structure.orphanNotes[i], content, version, updatedAt: new Date().toISOString() };
+            }
+          }
+        }
+        if (structure.categories) {
+          structure.categories.forEach(cat => patchNote(cat));
+        }
+        if (structure.groups) {
+          structure.groups.forEach(g => patchNote(g));
+        }
+        if (structure.subgroups) {
+          structure.subgroups.forEach(sg => patchNote(sg));
+        }
+      };
+      topicsRef.current.forEach(topic => patchNote(topic));
+      // No setTopics call — zero re-renders, cursor preserved.
     };
 
     socket.on('note-sync', handleNoteSyncForCache);
@@ -326,49 +324,40 @@ export const NoteProvider = ({ children }) => {
           setCurrentNote(updatedNote);
         }
       } else {
-        // Auto-save mode: DON'T update currentNote to prevent re-render
-        // The editor already has the latest content (user is typing it)
-        // Just update the cached version in topics array for when we switch back
-        setTopics(prevTopics => {
-          return prevTopics.map(topic => {
-            // Helper to update note recursively
-            const updateNoteInStructure = (structure) => {
-              if (structure.notes) {
-                structure.notes = structure.notes.map(n => 
-                  n._id === noteId ? updatedNote : n
-                );
+        // Auto-save mode: patch the cached topics ref IN-PLACE without calling setTopics.
+        // Calling setTopics here would trigger a re-render of every NoteContext consumer —
+        // including RichTextEditor — which causes React to reconcile the contentEditable DOM
+        // node and the browser loses the cursor position. Instead we mutate topicsRef.current
+        // directly so the cache stays fresh for when the user switches notes, with zero
+        // re-renders and zero cursor disruption.
+        const patchNoteInStructure = (structure) => {
+          if (structure.notes) {
+            for (let i = 0; i < structure.notes.length; i++) {
+              if (structure.notes[i]._id === noteId) {
+                structure.notes[i] = updatedNote;
               }
-              if (structure.categories) {
-                structure.categories = structure.categories.map(cat => {
-                  const updated = { ...cat };
-                  if (updated.notes) {
-                    updated.notes = updated.notes.map(n => 
-                      n._id === noteId ? updatedNote : n
-                    );
-                  }
-                  if (updated.groups) {
-                    updated.groups = updated.groups.map(updateNoteInStructure);
-                  }
-                  return updated;
-                });
+            }
+          }
+          if (structure.orphanNotes) {
+            for (let i = 0; i < structure.orphanNotes.length; i++) {
+              if (structure.orphanNotes[i]._id === noteId) {
+                structure.orphanNotes[i] = updatedNote;
               }
-              if (structure.groups) {
-                structure.groups = structure.groups.map(updateNoteInStructure);
-              }
-              if (structure.subgroups) {
-                structure.subgroups = structure.subgroups.map(updateNoteInStructure);
-              }
-              if (structure.orphanNotes) {
-                structure.orphanNotes = structure.orphanNotes.map(n => 
-                  n._id === noteId ? updatedNote : n
-                );
-              }
-              return structure;
-            };
-            
-            return updateNoteInStructure({ ...topic });
-          });
-        });
+            }
+          }
+          if (structure.categories) {
+            structure.categories.forEach(cat => patchNoteInStructure(cat));
+          }
+          if (structure.groups) {
+            structure.groups.forEach(g => patchNoteInStructure(g));
+          }
+          if (structure.subgroups) {
+            structure.subgroups.forEach(sg => patchNoteInStructure(sg));
+          }
+        };
+        topicsRef.current.forEach(topic => patchNoteInStructure(topic));
+        // topicsRef.current is now up-to-date. We do NOT call setTopics here
+        // so React does not re-render anything.
       }
       
       return { success: true, note: updatedNote };

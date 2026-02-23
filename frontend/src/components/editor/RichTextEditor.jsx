@@ -28,9 +28,9 @@ const RichTextEditor = forwardRef((props, ref) => {
     }
   }, [ref, currentNote?._id]); // Only re-sync when note ID changes
   
-  const [isSaving, setIsSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(new Map()); // Track uploading images
   const saveTimeoutRef = useRef(null);
+  const savingIndicatorRef = useRef(null); // Ref to the saving indicator DOM node (avoids re-render)
 
   // Load current note content - ONLY when note ID changes
   useEffect(() => {
@@ -134,6 +134,21 @@ const RichTextEditor = forwardRef((props, ref) => {
     };
   }, [socket]);
 
+  // Show/hide the saving indicator by directly mutating the DOM node.
+  // This deliberately avoids calling setIsSaving (React state) so that NO re-render
+  // is triggered during auto-save — which is the root cause of the cursor jump.
+  const showSavingIndicator = () => {
+    if (savingIndicatorRef.current) {
+      savingIndicatorRef.current.style.display = 'flex';
+    }
+  };
+
+  const hideSavingIndicator = () => {
+    if (savingIndicatorRef.current) {
+      savingIndicatorRef.current.style.display = 'none';
+    }
+  };
+
   // Auto-save on content change (debounced)
   const handleContentChange = () => {
     if (!currentNote || isSyncingFromSocketRef.current) return;
@@ -146,33 +161,65 @@ const RichTextEditor = forwardRef((props, ref) => {
     // Set new timeout for auto-save
     saveTimeoutRef.current = setTimeout(async () => {
       const content = editorRef.current?.innerHTML;
-      if (!content && content !== '') return; // Safety check
-      
+      if (content === undefined || content === null) return; // Safety check
+
       isAutoSavingRef.current = true;
-      setIsSaving(true);
-      
+      showSavingIndicator(); // Direct DOM mutation — no React re-render
+
+      // Capture cursor position BEFORE the async save, so we can restore it if needed
+      const selection = window.getSelection();
+      let savedRange = null;
+      if (selection && selection.rangeCount > 0) {
+        try {
+          savedRange = selection.getRangeAt(0).cloneRange();
+        } catch (e) {
+          // Ignore — cursor save is best-effort
+        }
+      }
+
       // Include version and sessionId for conflict detection
-      const result = await updateNote(currentNote._id, { 
+      const result = await updateNote(currentNote._id, {
         content,
         version: currentVersionRef.current,
         sessionId: sessionIdRef.current
       }, { skipRefresh: true });
-      
-      // Handle version conflict
-      if (result?.success === false && result?.conflict) {
-        console.warn('Version conflict detected:', result);
-        // For now, accept the server version (last-write-wins)
-        // In future, could show a merge UI
+
+      // Handle version conflict — only case where we must touch the DOM
+      if (result?.conflict) {
         if (editorRef.current && result.currentContent) {
           editorRef.current.innerHTML = result.currentContent;
           currentVersionRef.current = result.currentVersion;
+          // Cursor is inherently lost here because we replaced content with a server version.
+          // Move cursor to end as a reasonable fallback.
+          const range = document.createRange();
+          const sel = window.getSelection();
+          range.selectNodeContents(editorRef.current);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
         }
       } else if (result?.note) {
-        // Update version after successful save
+        // Successful save — update tracked version
         currentVersionRef.current = result.note.version;
+
+        // Restore cursor if it was shifted by any React reconciliation side-effect.
+        // This is a safety net: in most cases the cursor will not have moved because
+        // we no longer call setState during auto-save.
+        if (savedRange && editorRef.current) {
+          try {
+            const sel = window.getSelection();
+            // Only restore if the editor still has focus and the selection looks wrong
+            if (document.activeElement === editorRef.current) {
+              sel.removeAllRanges();
+              sel.addRange(savedRange);
+            }
+          } catch (e) {
+            // Ignore — restoration is best-effort
+          }
+        }
       }
-      
-      setIsSaving(false);
+
+      hideSavingIndicator(); // Direct DOM mutation — no React re-render
       isAutoSavingRef.current = false;
     }, 1000); // Save after 1 second of no typing
   };
@@ -660,12 +707,14 @@ const RichTextEditor = forwardRef((props, ref) => {
         suppressContentEditableWarning
       />
       
-      {/* Saving Indicator */}
-      {isSaving && (
-        <div className="absolute bottom-4 right-4 bg-gray-800 text-gray-300 text-xs px-3 py-1 rounded-full shadow-lg">
-          Saving...
-        </div>
-      )}
+      {/* Saving Indicator — always mounted, shown/hidden via direct DOM ref (no React re-render) */}
+      <div
+        ref={savingIndicatorRef}
+        style={{ display: 'none' }}
+        className="absolute bottom-4 right-4 bg-gray-800 text-gray-300 text-xs px-3 py-1 rounded-full shadow-lg items-center gap-1"
+      >
+        Saving...
+      </div>
     </>
   );
 });
