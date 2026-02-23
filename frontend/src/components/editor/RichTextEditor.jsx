@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef } from 'react';
+import { useEffect, useRef, forwardRef, memo } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import { uploadService } from '../../api/uploadService';
 import { useSocket } from '../../context/SocketContext';
@@ -8,7 +8,11 @@ import imageCompression from 'browser-image-compression';
 const RichTextEditor = forwardRef((props, ref) => {
   const editorRef = useRef(null);
   const { currentNote, updateNote } = useNotes();
-  const { socket, connected } = useSocket();
+
+  // socketRef and connectedRef are passed as props from the RichTextEditorWrapper below.
+  // This means RichTextEditor itself does NOT call useSocket() and does NOT subscribe
+  // to SocketContext — so socket reconnects never cause this component to re-render.
+  const { socketRef, connectedRef } = props;
   
   // Track the current note ID to detect actual note changes
   const currentNoteIdRef = useRef(null);
@@ -63,75 +67,71 @@ const RichTextEditor = forwardRef((props, ref) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentNote?._id]); // ← ONLY the note ID. socket/connected are handled separately.
 
-  // Manage socket room membership separately from content loading.
-  // This way socket reconnects never trigger an innerHTML reset.
+  // Manage socket room membership. Uses socketRef/connectedRef so this effect
+  // does NOT re-run (and thus does NOT cause a re-render) on socket reconnects.
+  // Instead it runs only when the note ID changes (user switches notes).
   useEffect(() => {
-    if (!socket || !connected) return;
     const noteId = currentNoteIdRef.current;
-    if (noteId) {
-      socket.emit('join-note', noteId);
-    }
+    const s = socketRef.current;
+    if (!s || !connectedRef.current || !noteId) return;
+    s.emit('join-note', noteId);
     return () => {
-      if (noteId) {
-        socket.emit('leave-note', noteId);
-      }
+      s.emit('leave-note', noteId);
     };
-  }, [socket, connected]);
+  }, [currentNote?._id]); // only when note changes, NOT on socket reconnect
 
-  // Socket listener for real-time sync from other sessions
+  // Socket listener for real-time sync from other sessions.
+  // Registered once on mount using the socket ref — no re-registration on reconnect.
   useEffect(() => {
-    if (!socket || !connected) return;
-
     const handleNoteSync = (data) => {
       const { noteId, content, version, sessionId } = data;
-      
-      // Ignore updates from this session (our own changes)
-      if (sessionId === sessionIdRef.current) return;
-      
-      // Only sync if we're viewing this note
-      if (noteId !== currentNote?._id) return;
-      
-      // Save cursor position
+      if (sessionId === sessionIdRef.current) return; // ignore own echo
+      if (noteId !== currentNoteIdRef.current) return; // ignore other notes
+
+      // Save cursor position before replacing innerHTML
       const selection = window.getSelection();
-      let cursorOffset = 0;
-      let cursorNode = null;
-      
+      let savedRange = null;
       if (selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        cursorNode = range.startContainer;
-        cursorOffset = range.startOffset;
+        savedRange = selection.getRangeAt(0).cloneRange();
       }
-      
-      // Update content from other session
+
       isSyncingFromSocketRef.current = true;
       if (editorRef.current) {
         editorRef.current.innerHTML = content;
       }
       currentVersionRef.current = version;
-      
-      // Restore cursor position (best effort)
+
+      // Restore cursor (best effort — node refs may have changed after innerHTML replace)
       try {
-        if (cursorNode && editorRef.current.contains(cursorNode)) {
-          const newRange = document.createRange();
+        if (savedRange && editorRef.current) {
           const newSelection = window.getSelection();
-          newRange.setStart(cursorNode, Math.min(cursorOffset, cursorNode.length));
-          newRange.collapse(true);
           newSelection.removeAllRanges();
-          newSelection.addRange(newRange);
+          newSelection.addRange(savedRange);
         }
-      } catch (e) {
-        // Cursor restoration failed, that's okay
-      }
-      
+      } catch (e) { /* ignore — cursor restore after remote sync is best-effort */ }
+
       isSyncingFromSocketRef.current = false;
     };
 
-    socket.on('note-sync', handleNoteSync);
+    // Attach listener via the socket ref. When the socket reconnects, the ref
+    // is updated by the useEffect above — but we do NOT re-register the listener
+    // here, which avoids the re-render that was resetting the cursor.
+    // Instead, we use a stable wrapper that always reads socketRef.current.
+    const attachListener = () => {
+      if (socketRef.current) {
+        socketRef.current.off('note-sync', handleNoteSync);
+        socketRef.current.on('note-sync', handleNoteSync);
+      }
+    };
+
+    attachListener();
 
     return () => {
-      socket.off('note-sync', handleNoteSync);
+      if (socketRef.current) {
+        socketRef.current.off('note-sync', handleNoteSync);
+      }
     };
-  }, [socket, connected, currentNote?._id]);
+  }, []); // mount/unmount only — socket reconnects do NOT cause re-render
 
   // Cleanup on unmount
   useEffect(() => {
@@ -139,12 +139,11 @@ const RichTextEditor = forwardRef((props, ref) => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      // Leave note room on unmount
-      if (socket && currentNoteIdRef.current) {
-        socket.emit('leave-note', currentNoteIdRef.current);
+      if (socketRef.current && currentNoteIdRef.current) {
+        socketRef.current.emit('leave-note', currentNoteIdRef.current);
       }
     };
-  }, [socket]);
+  }, []); // mount/unmount only
 
   // Show/hide the saving indicator by directly mutating the DOM node.
   // This deliberately avoids calling setIsSaving (React state) so that NO re-render
@@ -719,4 +718,39 @@ const RichTextEditor = forwardRef((props, ref) => {
 
 RichTextEditor.displayName = 'RichTextEditor';
 
-export default RichTextEditor;
+// Memoized inner editor — never re-renders due to socket or parent state changes.
+// It only re-renders if its own props change, which they never do (ref is stable,
+// socketRef/connectedRef are stable ref objects whose .current is updated externally).
+const MemoizedEditor = memo(RichTextEditor);
+
+// Wrapper component: the ONLY component that subscribes to SocketContext.
+// It holds stable refs for socket and connected, updates them imperatively when
+// the socket reconnects, and passes them to the memoized editor as stable props.
+// This way, socket reconnects cause this tiny wrapper to re-render but do NOT
+// cause the contentEditable editor to re-render — so the cursor never resets.
+const RichTextEditorWrapper = forwardRef((props, ref) => {
+  const { socket, connected } = useSocket();
+
+  // Stable ref objects — identity never changes, only .current changes.
+  // MemoizedEditor receives these as props; since ref identity is stable,
+  // memo() sees no prop change and skips re-rendering the editor.
+  const socketRef = useRef(socket);
+  const connectedRef = useRef(connected);
+
+  // Keep refs current without causing editor re-renders
+  socketRef.current = socket;
+  connectedRef.current = connected;
+
+  return (
+    <MemoizedEditor
+      ref={ref}
+      socketRef={socketRef}
+      connectedRef={connectedRef}
+      {...props}
+    />
+  );
+});
+
+RichTextEditorWrapper.displayName = 'RichTextEditorWrapper';
+
+export default RichTextEditorWrapper;

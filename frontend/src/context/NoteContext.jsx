@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useRef } from 'react';
+import { createContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { noteService } from '../api/noteService';
 import { useSocket } from './SocketContext';
 
@@ -76,155 +76,133 @@ export const NoteProvider = ({ children }) => {
     };
   }, [socket, connected]);
 
-  const fetchAllNotes = async () => {
+  // fetchAllNotes uses functional setState forms (prev => ...) so it never closes
+  // over stale state values — this lets us wrap it in useCallback([]) with no deps,
+  // giving it a stable reference that never changes. A stable reference means
+  // NoteContext consumers (including RichTextEditor) do NOT re-render just because
+  // fetchAllNotes was "recreated".
+  const fetchAllNotes = useCallback(async () => {
     try {
       setLoading(true);
       const data = await noteService.getAllNotes();
       setTopics(data);
-      
-      // Auto-select first topic if available, or update currentTopic with fresh data
-      if (data.length > 0) {
-        if (!currentTopic) {
-          setCurrentTopic(data[0]);
-        } else {
-          // Update currentTopic with fresh data from server
-          const updatedCurrentTopic = data.find(t => t._id === currentTopic._id);
-          if (updatedCurrentTopic) {
-            setCurrentTopic(updatedCurrentTopic);
-            
-            // Also update currentCategory if it exists
-            if (currentCategory) {
-              const updatedCategory = updatedCurrentTopic.categories?.find(
-                c => c._id === currentCategory._id
-              );
-              if (updatedCategory) {
-                setCurrentCategory(updatedCategory);
-              } else {
-                setCurrentCategory(null);
-              }
+
+      // Use functional updater forms to read latest state without closing over it
+      setCurrentTopic(prevTopic => {
+        if (data.length === 0) return null;
+        if (!prevTopic) return data[0];
+        const updated = data.find(t => t._id === prevTopic._id);
+        return updated || data[0];
+      });
+
+      setCurrentCategory(prevCategory => {
+        if (!prevCategory) return null;
+        // Find the updated topic to look inside it
+        // We read from `data` which is in scope (not state)
+        for (const topic of data) {
+          const found = topic.categories?.find(c => c._id === prevCategory._id);
+          if (found) return found;
+        }
+        return null;
+      });
+
+      setCurrentNote(prevNote => {
+        if (!prevNote) return null;
+
+        const findNoteInGroup = (group) => {
+          const note = group.notes?.find(n => n._id === prevNote._id);
+          if (note) return note;
+          for (const sg of group.subgroups || []) {
+            const found = findNoteInGroup(sg);
+            if (found) return found;
+          }
+          return null;
+        };
+
+        for (const topic of data) {
+          // Check orphan notes
+          const orphan = topic.orphanNotes?.find(n => n._id === prevNote._id);
+          if (orphan) return orphan;
+          // Check categories
+          for (const cat of topic.categories || []) {
+            const direct = cat.notes?.find(n => n._id === prevNote._id);
+            if (direct) return direct;
+            for (const grp of cat.groups || []) {
+              const inGroup = findNoteInGroup(grp);
+              if (inGroup) return inGroup;
             }
-            
-            // Also update currentNote if it exists
-            if (currentNote) {
-              let foundNote = null;
-              
-              // First check orphan notes (notes without category)
-              foundNote = updatedCurrentTopic.orphanNotes?.find(n => n._id === currentNote._id);
-              
-              // Helper function to recursively search for note in nested groups
-              const findNoteInGroup = (group) => {
-                // Check notes in current group
-                const note = group.notes?.find(n => n._id === currentNote._id);
-                if (note) return note;
-                
-                // Recursively check subgroups
-                for (const subgroup of group.subgroups || []) {
-                  const subNote = findNoteInGroup(subgroup);
-                  if (subNote) return subNote;
-                }
-                return null;
-              };
-              
-              // If not found, search in all categories and groups for the note
-              if (!foundNote) {
-                for (const category of updatedCurrentTopic.categories || []) {
-                  // Check direct notes
-                  foundNote = category.notes?.find(n => n._id === currentNote._id);
-                  if (foundNote) break;
-                  
-                  // Check group notes (including nested subgroups)
-                  for (const group of category.groups || []) {
-                    foundNote = findNoteInGroup(group);
-                    if (foundNote) break;
-                  }
-                  if (foundNote) break;
-                }
-              }
-              
-              if (foundNote) {
-                setCurrentNote(foundNote);
-              } else {
-                setCurrentNote(null);
-              }
-            }
-          } else {
-            // Current topic was deleted, select first available
-            setCurrentTopic(data[0]);
-            setCurrentCategory(null);
-            setCurrentNote(null);
           }
         }
-      } else {
-        setCurrentTopic(null);
-        setCurrentCategory(null);
-        setCurrentNote(null);
-      }
+        return null; // Note was deleted
+      });
+
     } catch (error) {
       console.error('Failed to fetch notes:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // stable — uses functional setState, reads `data` from closure (not stale state)
 
   // ==========================================
   // TOPIC OPERATIONS
   // ==========================================
-  const createTopic = async (topicData) => {
+  const createTopic = useCallback(async (topicData) => {
     try {
       const newTopic = await noteService.createTopic(topicData);
-      setTopics([...topics, newTopic]);
+      setTopics(prev => [...prev, newTopic]);
       return { success: true, topic: newTopic };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to create topic';
       return { success: false, error: message };
     }
-  };
+  }, []);
 
-  const updateTopic = async (topicId, topicData) => {
+  const updateTopic = useCallback(async (topicId, topicData) => {
     try {
       const updatedTopic = await noteService.updateTopic(topicId, topicData);
-      setTopics(topics.map(t => t._id === topicId ? updatedTopic : t));
-      if (currentTopic?._id === topicId) {
-        setCurrentTopic(updatedTopic);
-      }
+      setTopics(prev => prev.map(t => t._id === topicId ? updatedTopic : t));
+      setCurrentTopic(prev => prev?._id === topicId ? updatedTopic : prev);
       return { success: true, topic: updatedTopic };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to update topic';
       return { success: false, error: message };
     }
-  };
+  }, []);
 
-  const deleteTopic = async (topicId) => {
+  const deleteTopic = useCallback(async (topicId) => {
     try {
       await noteService.deleteTopic(topicId);
-      setTopics(topics.filter(t => t._id !== topicId));
-      if (currentTopic?._id === topicId) {
-        setCurrentTopic(null);
-        setCurrentCategory(null);
-        setCurrentNote(null);
-      }
+      setTopics(prev => prev.filter(t => t._id !== topicId));
+      setCurrentTopic(prev => {
+        if (prev?._id === topicId) {
+          setCurrentCategory(null);
+          setCurrentNote(null);
+          return null;
+        }
+        return prev;
+      });
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to delete topic';
       return { success: false, error: message };
     }
-  };
+  }, []);
 
   // ==========================================
   // CATEGORY OPERATIONS
   // ==========================================
-  const createCategory = async (categoryData) => {
+  const createCategory = useCallback(async (categoryData) => {
     try {
       const newCategory = await noteService.createCategory(categoryData);
-      await fetchAllNotes(); // Refresh to get updated hierarchy
+      await fetchAllNotes();
       return { success: true, category: newCategory };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to create category';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  const updateCategory = async (categoryId, categoryData) => {
+  const updateCategory = useCallback(async (categoryId, categoryData) => {
     try {
       await noteService.updateCategory(categoryId, categoryData);
       await fetchAllNotes();
@@ -233,27 +211,30 @@ export const NoteProvider = ({ children }) => {
       const message = error.response?.data?.message || 'Failed to update category';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  const deleteCategory = async (categoryId) => {
+  const deleteCategory = useCallback(async (categoryId) => {
     try {
       await noteService.deleteCategory(categoryId);
       await fetchAllNotes();
-      if (currentCategory?._id === categoryId) {
-        setCurrentCategory(null);
-        setCurrentNote(null);
-      }
+      setCurrentCategory(prev => {
+        if (prev?._id === categoryId) {
+          setCurrentNote(null);
+          return null;
+        }
+        return prev;
+      });
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to delete category';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
   // ==========================================
   // GROUP OPERATIONS
   // ==========================================
-  const createGroup = async (groupData) => {
+  const createGroup = useCallback(async (groupData) => {
     try {
       await noteService.createGroup(groupData);
       await fetchAllNotes();
@@ -262,9 +243,9 @@ export const NoteProvider = ({ children }) => {
       const message = error.response?.data?.message || 'Failed to create group';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  const updateGroup = async (groupId, groupData) => {
+  const updateGroup = useCallback(async (groupId, groupData) => {
     try {
       await noteService.updateGroup(groupId, groupData);
       await fetchAllNotes();
@@ -273,9 +254,9 @@ export const NoteProvider = ({ children }) => {
       const message = error.response?.data?.message || 'Failed to update group';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  const deleteGroup = async (groupId) => {
+  const deleteGroup = useCallback(async (groupId) => {
     try {
       await noteService.deleteGroup(groupId);
       await fetchAllNotes();
@@ -284,12 +265,12 @@ export const NoteProvider = ({ children }) => {
       const message = error.response?.data?.message || 'Failed to delete group';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
   // ==========================================
   // NOTE OPERATIONS
   // ==========================================
-  const createNote = async (noteData) => {
+  const createNote = useCallback(async (noteData) => {
     try {
       const newNote = await noteService.createNote(noteData);
       await fetchAllNotes();
@@ -299,37 +280,27 @@ export const NoteProvider = ({ children }) => {
       const message = error.response?.data?.message || 'Failed to create note';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  const updateNote = async (noteId, noteData, options = {}) => {
+  const updateNote = useCallback(async (noteId, noteData, options = {}) => {
     const { skipRefresh = false } = options;
     try {
       const result = await noteService.updateNote(noteId, noteData);
-      
+
       // Check if it's a conflict response
       if (result.conflict) {
         return result;
       }
-      
+
       const updatedNote = result;
-      
-      // Skip full hierarchy refresh for content-only updates (auto-save)
-      // This prevents cursor reset and unnecessary re-renders
+
       if (!skipRefresh) {
-        // Full refresh - update everything including currentNote
+        // Full refresh for metadata changes (title, etc.)
         await fetchAllNotes();
-        
-        // Update currentNote for non-auto-save updates (e.g., title changes)
-        if (currentNote?._id === noteId) {
-          setCurrentNote(updatedNote);
-        }
+        setCurrentNote(prev => prev?._id === noteId ? updatedNote : prev);
       } else {
-        // Auto-save mode: patch the cached topics ref IN-PLACE without calling setTopics.
-        // Calling setTopics here would trigger a re-render of every NoteContext consumer —
-        // including RichTextEditor — which causes React to reconcile the contentEditable DOM
-        // node and the browser loses the cursor position. Instead we mutate topicsRef.current
-        // directly so the cache stays fresh for when the user switches notes, with zero
-        // re-renders and zero cursor disruption.
+        // AUTO-SAVE MODE: patch topicsRef in-place — zero React state changes,
+        // zero re-renders, cursor stays exactly where the user left it.
         const patchNoteInStructure = (structure) => {
           if (structure.notes) {
             for (let i = 0; i < structure.notes.length; i++) {
@@ -345,61 +316,52 @@ export const NoteProvider = ({ children }) => {
               }
             }
           }
-          if (structure.categories) {
-            structure.categories.forEach(cat => patchNoteInStructure(cat));
-          }
-          if (structure.groups) {
-            structure.groups.forEach(g => patchNoteInStructure(g));
-          }
-          if (structure.subgroups) {
-            structure.subgroups.forEach(sg => patchNoteInStructure(sg));
-          }
+          if (structure.categories) structure.categories.forEach(cat => patchNoteInStructure(cat));
+          if (structure.groups) structure.groups.forEach(g => patchNoteInStructure(g));
+          if (structure.subgroups) structure.subgroups.forEach(sg => patchNoteInStructure(sg));
         };
         topicsRef.current.forEach(topic => patchNoteInStructure(topic));
-        // topicsRef.current is now up-to-date. We do NOT call setTopics here
-        // so React does not re-render anything.
       }
-      
+
       return { success: true, note: updatedNote };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to update note';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  const deleteNote = async (noteId) => {
+  const deleteNote = useCallback(async (noteId) => {
     try {
       await noteService.deleteNote(noteId);
       await fetchAllNotes();
-      if (currentNote?._id === noteId) {
-        setCurrentNote(null);
-      }
+      setCurrentNote(prev => prev?._id === noteId ? null : prev);
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to delete note';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  // Move note to a different category or group
-  const moveNote = async (noteId, targetCategoryId, targetGroupId = null) => {
+  const moveNote = useCallback(async (noteId, targetCategoryId, targetGroupId = null) => {
     try {
       const updatedNote = await noteService.updateNote(noteId, {
         categoryId: targetCategoryId,
         groupId: targetGroupId
       });
       await fetchAllNotes();
-      if (currentNote?._id === noteId) {
-        setCurrentNote(updatedNote);
-      }
+      setCurrentNote(prev => prev?._id === noteId ? updatedNote : prev);
       return { success: true, note: updatedNote };
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to move note';
       return { success: false, error: message };
     }
-  };
+  }, [fetchAllNotes]);
 
-  const value = {
+  // Memoize the context value so consumers only re-render when the values
+  // they actually care about change — not on every NoteProvider render.
+  // All function references are stable (useCallback), so this object is only
+  // recreated when the actual data (topics, currentNote, etc.) changes.
+  const value = useMemo(() => ({
     topics,
     currentTopic,
     currentCategory,
@@ -422,7 +384,18 @@ export const NoteProvider = ({ children }) => {
     updateNote,
     deleteNote,
     moveNote,
-  };
+  }), [
+    topics,
+    currentTopic,
+    currentCategory,
+    currentNote,
+    loading,
+    fetchAllNotes,
+    createTopic, updateTopic, deleteTopic,
+    createCategory, updateCategory, deleteCategory,
+    createGroup, updateGroup, deleteGroup,
+    createNote, updateNote, deleteNote, moveNote,
+  ]);
 
   return <NoteContext.Provider value={value}>{children}</NoteContext.Provider>;
 };
