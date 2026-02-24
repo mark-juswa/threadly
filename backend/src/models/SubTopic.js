@@ -28,6 +28,9 @@ const SubTopicSchema = new mongoose.Schema({
     default: null 
   },
   
+  // Display order within its container (category, group, or orphan)
+  order: { type: Number, default: 0 },
+
   // User association
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 

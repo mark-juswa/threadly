@@ -5,6 +5,7 @@ import {
   getNote,
   updateNote, 
   deleteNote,
+  reorderNotes,
   createTopic,
   updateTopic,
   deleteTopic,
@@ -42,6 +43,8 @@ router.delete('/groups/:id', deleteGroup);
 
 // 5. Note Operations
 router.post('/', createNote);
+// 6. Reorder Notes — MUST be declared before /:id so Express doesn't treat "reorder" as an ID
+router.put('/reorder', reorderNotes);
 router.get('/:id', getNote);
 router.put('/:id', updateNote);
 router.delete('/:id', deleteNote);

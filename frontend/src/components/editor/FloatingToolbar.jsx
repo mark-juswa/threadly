@@ -1,14 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const FloatingToolbar = () => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [visible, setVisible] = useState(false);
+  // pinnedRef tracks whether the toolbar is pinned via Alt+` so that
+  // it stays visible even when there is no active text selection.
+  const pinnedRef = useRef(false);
+
+  // Compute a position for the toolbar based on the current cursor / selection.
+  // Returns null when the cursor is not inside the editor.
+  const getPositionFromCursor = () => {
+    const selection = window.getSelection();
+    const editor = document.getElementById('editor');
+    if (!editor) return null;
+
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (editor.contains(range.commonAncestorContainer)) {
+        const rect = range.getBoundingClientRect();
+        // For a collapsed cursor rect.width === 0 — use left/top directly.
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top,
+        };
+      }
+    }
+
+    // Fallback: centre of the editor
+    const editorRect = editor.getBoundingClientRect();
+    return {
+      x: editorRect.left + editorRect.width / 2,
+      y: editorRect.top + 60,
+    };
+  };
 
   useEffect(() => {
+    // ── Selection-driven visibility (original behaviour) ──────────────────────
     const handleSelectionChange = () => {
+      // Don't hide when toolbar is pinned — pinned mode controls its own visibility.
+      if (pinnedRef.current) return;
+
       setTimeout(() => {
         const selection = window.getSelection();
-        
+
         if (!selection.rangeCount || selection.isCollapsed) {
           setVisible(false);
           return;
@@ -16,18 +50,18 @@ const FloatingToolbar = () => {
 
         const range = selection.getRangeAt(0);
         const editor = document.getElementById('editor');
-        
+
         if (!editor || !editor.contains(range.commonAncestorContainer)) {
           setVisible(false);
           return;
         }
 
         const rect = range.getBoundingClientRect();
-        
+
         if (rect.width > 0) {
           setPosition({
-            x: rect.left + (rect.width / 2),
-            y: rect.top
+            x: rect.left + rect.width / 2,
+            y: rect.top,
           });
           setVisible(true);
         }
@@ -39,17 +73,35 @@ const FloatingToolbar = () => {
     };
 
     const handleScroll = () => {
-      setVisible(false);
+      // Only hide on scroll when not pinned
+      if (!pinnedRef.current) setVisible(false);
+    };
+
+    // ── Alt+` toggle handler ──────────────────────────────────────────────────
+    const handleToggle = () => {
+      if (pinnedRef.current) {
+        // Unpin and hide
+        pinnedRef.current = false;
+        setVisible(false);
+      } else {
+        // Pin and show at current cursor position
+        const pos = getPositionFromCursor();
+        pinnedRef.current = true;
+        if (pos) setPosition(pos);
+        setVisible(true);
+      }
     };
 
     document.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('keyup', handleSelectionChange);
     window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('toggleFloatingToolbar', handleToggle);
 
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('keyup', handleSelectionChange);
       window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('toggleFloatingToolbar', handleToggle);
     };
   }, []);
 
@@ -309,8 +361,11 @@ const FloatingToolbar = () => {
         top: `${position.y}px`,
         left: `${position.x}px`,
         transform: 'translate(-50%, -100%)',
-        marginTop: '-12px'
+        marginTop: '-12px',
+        // Subtle blue border tint when pinned so users know it's in pinned mode
+        ...(pinnedRef.current && { borderColor: '#3b82f6' }),
       }}
+      title={pinnedRef.current ? 'Floating toolbar (pinned — press Alt+` to close)' : 'Floating toolbar'}
     >
       {/* Bold */}
       <button
@@ -401,9 +456,9 @@ const FloatingToolbar = () => {
       <div className="w-px h-5 bg-gray-700 mx-1.5" />
 
       {/* Headings */}
-      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h1'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H1</button>
-      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h2'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H2</button>
-      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h3'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm">H3</button>
+      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h1'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm" title="Heading 1 (Alt+1)">H1</button>
+      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h2'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm" title="Heading 2 (Alt+2)">H2</button>
+      <button onMouseDown={(e) => { e.preventDefault(); toggleBlock('h3'); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition font-bold text-sm" title="Heading 3 (Alt+3)">H3</button>
 
       <div className="w-px h-5 bg-gray-700 mx-1.5" />
 
@@ -414,7 +469,7 @@ const FloatingToolbar = () => {
           formatDoc('insertUnorderedList');
         }}
         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition"
-        title="Bullet List"
+        title="Bullet List (Alt+Q)"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />

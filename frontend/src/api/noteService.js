@@ -96,4 +96,11 @@ export const noteService = {
     const response = await api.delete(`/api/notes/${noteId}`);
     return response.data;
   },
+
+  // Reorder notes within the same container
+  // orderedIds: string[] — full ordered list of note IDs in the container
+  reorderNotes: async (orderedIds) => {
+    const response = await api.put('/api/notes/reorder', { orderedIds });
+    return response.data;
+  },
 };

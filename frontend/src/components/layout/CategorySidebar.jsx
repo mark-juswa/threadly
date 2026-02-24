@@ -1,6 +1,19 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import UserProfile from './UserProfile';
+
+// Helper: sort notes by order field
+const sortByOrder = (notes) =>
+  notes ? [...notes].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) : [];
+
+// Drop-indicator line shown above or below a note during reorder drag
+const DropIndicator = ({ position }) => (
+  <div
+    className={`h-0.5 bg-green-400 rounded-full mx-1 transition-all ${
+      position === 'above' ? 'mb-0.5' : 'mt-0.5'
+    }`}
+  />
+);
 
 // Recursive GroupItem component for rendering nested groups
 const GroupItem = ({
@@ -9,6 +22,7 @@ const GroupItem = ({
   depth,
   currentNote,
   draggedNote,
+  dragOverNote,
   collapsedGroups,
   searchQuery,
   isDropTarget,
@@ -22,9 +36,12 @@ const GroupItem = ({
   handleDragEnd,
   handleNoteClick,
   handleSubtopicContextMenu,
+  handleDragOverNote,
+  handleDropOnNote,
 }) => {
   const marginLeft = depth > 0 ? `${depth * 8}px` : '0';
-  
+  const sortedNotes = sortByOrder(group.notes);
+
   return (
     <div 
       className={`mb-2 rounded-md transition ${
@@ -53,7 +70,6 @@ const GroupItem = ({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
         </svg>
         <span>{group.name}</span>
-        {/* Visual indicator for nested groups */}
         {depth > 0 && (
           <span className="ml-1 text-gray-600 text-[10px]">↳</span>
         )}
@@ -63,25 +79,31 @@ const GroupItem = ({
       {(!collapsedGroups[group._id] || searchQuery) && (
         <>
           {/* Group Notes */}
-          {group.notes?.map((note) => {
+          {sortedNotes.map((note) => {
             const isActive = currentNote?._id === note._id;
             const isDragging = draggedNote?._id === note._id;
+            const isOver = dragOverNote?.noteId === note._id;
             return (
-              <div
-                key={note._id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, note)}
-                onDragEnd={handleDragEnd}
-                onClick={() => handleNoteClick(note)}
-                onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
-                className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ml-2 ${
-                  isActive 
-                    ? 'border border-gray-700 hover:border-gray-500' 
-                    : 'hover:bg-[#222225]'
-                } ${isDragging ? 'opacity-50' : ''}`}
-              >
-                {isActive && <div className="w-2 h-2 mr-2 border-2 border-blue-500 rounded-full" />}
-                <span className="truncate searchable-text">{note.title}</span>
+              <div key={note._id}>
+                {isOver && dragOverNote.position === 'above' && <DropIndicator position="above" />}
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, note)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOverNote(e, note, sortedNotes, group._id, 'group')}
+                  onDrop={(e) => handleDropOnNote(e, note, sortedNotes, group._id, 'group', categoryId)}
+                  onClick={() => handleNoteClick(note)}
+                  onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
+                  className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ml-2 ${
+                    isActive 
+                      ? 'border border-gray-700 hover:border-gray-500' 
+                      : 'hover:bg-[#222225]'
+                  } ${isDragging ? 'opacity-50' : ''}`}
+                >
+                  {isActive && <div className="w-2 h-2 mr-2 border-2 border-blue-500 rounded-full" />}
+                  <span className="truncate searchable-text">{note.title}</span>
+                </div>
+                {isOver && dragOverNote.position === 'below' && <DropIndicator position="below" />}
               </div>
             );
           })}
@@ -95,6 +117,7 @@ const GroupItem = ({
               depth={depth + 1}
               currentNote={currentNote}
               draggedNote={draggedNote}
+              dragOverNote={dragOverNote}
               collapsedGroups={collapsedGroups}
               searchQuery={searchQuery}
               isDropTarget={isDropTarget}
@@ -108,6 +131,8 @@ const GroupItem = ({
               handleDragEnd={handleDragEnd}
               handleNoteClick={handleNoteClick}
               handleSubtopicContextMenu={handleSubtopicContextMenu}
+              handleDragOverNote={handleDragOverNote}
+              handleDropOnNote={handleDropOnNote}
             />
           ))}
         </>
@@ -117,12 +142,16 @@ const GroupItem = ({
 };
 
 const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onCreateCategory }) => {
-  const { topics, currentTopic, currentNote, setCurrentCategory, setCurrentNote, moveNote } = useNotes();
+  const { topics, currentTopic, currentNote, setCurrentCategory, setCurrentNote, moveNote, reorderNotes } = useNotes();
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState({});
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [draggedNote, setDraggedNote] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
+  // dragOverNote: { noteId, position: 'above'|'below' } — drives the drop indicator line
+  const [dragOverNote, setDragOverNote] = useState(null);
+  // Ref to avoid stale closure in drag handlers
+  const draggedNoteRef = useRef(null);
 
   const toggleCollapse = (categoryId) => {
     setCollapsedCategories(prev => ({
@@ -141,9 +170,9 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
   // Drag and Drop Handlers
   const handleDragStart = (e, note) => {
     setDraggedNote(note);
+    draggedNoteRef.current = note;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', note._id);
-    // Add a slight delay to allow the drag image to be set
     setTimeout(() => {
       e.target.style.opacity = '0.5';
     }, 0);
@@ -152,6 +181,91 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
   const handleDragEnd = (e) => {
     e.target.style.opacity = '1';
     setDraggedNote(null);
+    draggedNoteRef.current = null;
+    setDropTarget(null);
+    setDragOverNote(null);
+  };
+
+  // Called when dragging over a specific note element — determines above/below position
+  const handleDragOverNote = (e, targetNote, notesList, containerId, containerType) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dragged = draggedNoteRef.current;
+    if (!dragged || dragged._id === targetNote._id) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? 'above' : 'below';
+
+    setDragOverNote(prev => {
+      if (prev?.noteId === targetNote._id && prev?.position === position) return prev;
+      return { noteId: targetNote._id, position, containerId, containerType };
+    });
+    // Suppress container-level drop highlight when reordering within same container
+    setDropTarget(null);
+  };
+
+  // Called when a note is dropped ON another note — reorder or move+reorder
+  const handleDropOnNote = async (e, targetNote, notesList, containerId, containerType, categoryId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dragged = draggedNoteRef.current;
+    if (!dragged || dragged._id === targetNote._id) {
+      setDragOverNote(null);
+      setDraggedNote(null);
+      draggedNoteRef.current = null;
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? 'above' : 'below';
+
+    // Determine whether this is a same-container reorder or a cross-container move
+    const isSameContainer =
+      containerType === 'group'
+        ? dragged.groupId === containerId
+        : containerType === 'category'
+        ? dragged.categoryId === containerId && !dragged.groupId
+        : !dragged.categoryId && !dragged.groupId; // orphan
+
+    if (!isSameContainer) {
+      // Cross-container: move first, then the order within the new container
+      // will default to end — user can re-drag to fine-tune.
+      const targetCatId = containerType === 'orphan' ? null : categoryId;
+      const targetGrpId = containerType === 'group' ? containerId : null;
+      await moveNote(dragged._id, targetCatId, targetGrpId);
+      setDragOverNote(null);
+      setDraggedNote(null);
+      draggedNoteRef.current = null;
+      return;
+    }
+
+    // Same container — build new ordered ID list
+    const currentOrder = [...notesList];
+    const fromIdx = currentOrder.findIndex(n => n._id === dragged._id);
+    const toIdx = currentOrder.findIndex(n => n._id === targetNote._id);
+
+    if (fromIdx === -1 || toIdx === -1) {
+      setDragOverNote(null);
+      return;
+    }
+
+    // Remove dragged note from its current position
+    const reordered = [...currentOrder];
+    const [removed] = reordered.splice(fromIdx, 1);
+
+    // Recalculate toIdx after removal
+    const newToIdx = reordered.findIndex(n => n._id === targetNote._id);
+    const insertAt = position === 'above' ? newToIdx : newToIdx + 1;
+    reordered.splice(insertAt, 0, removed);
+
+    const orderedIds = reordered.map(n => n._id);
+    await reorderNotes(orderedIds, containerId, containerType);
+
+    setDragOverNote(null);
+    setDraggedNote(null);
+    draggedNoteRef.current = null;
     setDropTarget(null);
   };
 
@@ -463,25 +577,32 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
                   onDrop={(e) => handleDropOnCategory(e, category._id)}
                 >
                   {/* Direct notes */}
-                  {category.notes?.map((note) => {
+                  {sortByOrder(category.notes).map((note) => {
                     const isActive = currentNote?._id === note._id;
                     const isDragging = draggedNote?._id === note._id;
+                    const isOver = dragOverNote?.noteId === note._id;
+                    const sortedCatNotes = sortByOrder(category.notes);
                     return (
-                      <div
-                        key={note._id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, note)}
-                        onDragEnd={handleDragEnd}
-                        onClick={() => handleNoteClick(note)}
-                        onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
-                        className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ${
-                          isActive 
-                            ? ' bg-[#1A1A1D] border border-gray-700 hover:border-gray-500' 
-                            : 'hover:bg-[#222225]'
-                        } ${isDragging ? 'opacity-50' : ''}`}
-                      >
-                        {isActive && <div className="w-2 h-2 mr-2 border-2 border-green-500 rounded-full" />}
-                        <span className="truncate searchable-text">{note.title}</span>
+                      <div key={note._id}>
+                        {isOver && dragOverNote.position === 'above' && <DropIndicator position="above" />}
+                        <div
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, note)}
+                          onDragEnd={handleDragEnd}
+                          onDragOver={(e) => handleDragOverNote(e, note, sortedCatNotes, category._id, 'category')}
+                          onDrop={(e) => handleDropOnNote(e, note, sortedCatNotes, category._id, 'category', category._id)}
+                          onClick={() => handleNoteClick(note)}
+                          onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
+                          className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ${
+                            isActive 
+                              ? ' bg-[#1A1A1D] border border-gray-700 hover:border-gray-500' 
+                              : 'hover:bg-[#222225]'
+                          } ${isDragging ? 'opacity-50' : ''}`}
+                        >
+                          {isActive && <div className="w-2 h-2 mr-2 border-2 border-green-500 rounded-full" />}
+                          <span className="truncate searchable-text">{note.title}</span>
+                        </div>
+                        {isOver && dragOverNote.position === 'below' && <DropIndicator position="below" />}
                       </div>
                     );
                   })}
@@ -495,6 +616,7 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
                       depth={0}
                       currentNote={currentNote}
                       draggedNote={draggedNote}
+                      dragOverNote={dragOverNote}
                       collapsedGroups={collapsedGroups}
                       searchQuery={searchQuery}
                       isDropTarget={isDropTarget}
@@ -508,6 +630,8 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
                       handleDragEnd={handleDragEnd}
                       handleNoteClick={handleNoteClick}
                       handleSubtopicContextMenu={handleSubtopicContextMenu}
+                      handleDragOverNote={handleDragOverNote}
+                      handleDropOnNote={handleDropOnNote}
                     />
                   ))}
                 </div>
@@ -531,25 +655,32 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
                 Drop here to remove from category
               </div>
             )}
-            {filteredOrphanNotes.map((note) => {
+            {sortByOrder(filteredOrphanNotes).map((note) => {
               const isActive = currentNote?._id === note._id;
               const isDragging = draggedNote?._id === note._id;
+              const isOver = dragOverNote?.noteId === note._id;
+              const sortedOrphans = sortByOrder(filteredOrphanNotes);
               return (
-                <div
-                  key={note._id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, note)}
-                  onDragEnd={handleDragEnd}
-                  onClick={() => handleNoteClick(note)}
-                  onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
-                  className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ${
-                    isActive 
-                      ? 'bg-[#1A1A1D] border border-gray-700 hover:border-gray-500' 
-                      : 'hover:bg-[#222225]'
-                  } ${isDragging ? 'opacity-50' : ''}`}
-                >
-                  {isActive && <div className="w-2 h-2 mr-2 border-2 border-purple-500 rounded-full" />}
-                  <span className="truncate searchable-text">{note.title}</span>
+                <div key={note._id}>
+                  {isOver && dragOverNote.position === 'above' && <DropIndicator position="above" />}
+                  <div
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, note)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOverNote(e, note, sortedOrphans, 'orphan', 'orphan')}
+                    onDrop={(e) => handleDropOnNote(e, note, sortedOrphans, 'orphan', 'orphan', null)}
+                    onClick={() => handleNoteClick(note)}
+                    onContextMenu={(e) => handleSubtopicContextMenu(e, note)}
+                    className={`sidebar-item flex items-center px-3 py-2 bg-[#0d0d0e] rounded-md text-gray-200 text-sm cursor-grab mb-1 transition ${
+                      isActive 
+                        ? 'bg-[#1A1A1D] border border-gray-700 hover:border-gray-500' 
+                        : 'hover:bg-[#222225]'
+                    } ${isDragging ? 'opacity-50' : ''}`}
+                  >
+                    {isActive && <div className="w-2 h-2 mr-2 border-2 border-purple-500 rounded-full" />}
+                    <span className="truncate searchable-text">{note.title}</span>
+                  </div>
+                  {isOver && dragOverNote.position === 'below' && <DropIndicator position="below" />}
                 </div>
               );
             })}

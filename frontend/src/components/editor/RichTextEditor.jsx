@@ -324,6 +324,17 @@ const RichTextEditor = forwardRef((props, ref) => {
     document.execCommand(cmd, false, value);
   };
 
+  // Helper to toggle a heading block (H1/H2/H3); pressing the same shortcut twice reverts to <p>
+  const toggleHeading = (tag) => {
+    const current = document.queryCommandValue('formatBlock');
+    if (current && current.toLowerCase() === tag) {
+      document.execCommand('formatBlock', false, 'p');
+    } else {
+      document.execCommand('formatBlock', false, tag);
+    }
+    editorRef.current?.focus();
+  };
+
   // Handle keydown for list behaviors (Enter and Backspace) and formatting shortcuts
   const handleKeyDown = (e) => {
     // Handle formatting keyboard shortcuts (Ctrl+B, Ctrl+I, Ctrl+U)
@@ -344,12 +355,56 @@ const RichTextEditor = forwardRef((props, ref) => {
       }
     }
 
-    // Handle Alt+H for highlight toggle
-    if (e.altKey && e.key.toLowerCase() === 'h') {
-      e.preventDefault();
-      toggleHighlight();
-      return;
+    // ── Alt-key shortcuts ─────────────────────────────────────────────────────
+    if (e.altKey) {
+      switch (e.key) {
+        // Alt+` — toggle the floating toolbar (pinned mode)
+        case '`': {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('toggleFloatingToolbar'));
+          return;
+        }
+        // Alt+1 — toggle H1
+        case '1': {
+          e.preventDefault();
+          toggleHeading('h1');
+          handleContentChange();
+          return;
+        }
+        // Alt+2 — toggle H2
+        case '2': {
+          e.preventDefault();
+          toggleHeading('h2');
+          handleContentChange();
+          return;
+        }
+        // Alt+3 — toggle H3
+        case '3': {
+          e.preventDefault();
+          toggleHeading('h3');
+          handleContentChange();
+          return;
+        }
+        // Alt+Q — toggle bullet list
+        case 'q':
+        case 'Q': {
+          e.preventDefault();
+          applyFormat('insertUnorderedList');
+          handleContentChange();
+          return;
+        }
+        // Alt+H — toggle highlight (existing)
+        case 'h':
+        case 'H': {
+          e.preventDefault();
+          toggleHighlight();
+          return;
+        }
+        default:
+          break;
+      }
     }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount) return;

@@ -357,6 +357,66 @@ export const NoteProvider = ({ children }) => {
     }
   }, [fetchAllNotes]);
 
+  // Reorder notes within the same container.
+  // `orderedIds` is the full new order of note IDs in that container.
+  // We apply an optimistic local update immediately (patch topicsRef + setTopics)
+  // then persist to the backend asynchronously.
+  const reorderNotes = useCallback(async (orderedIds, containerId, containerType) => {
+    // Optimistic update — reorder notes in topicsRef in-place then push to state
+    const applyOrder = (notesList) => {
+      if (!notesList) return notesList;
+      const orderMap = {};
+      orderedIds.forEach((id, idx) => { orderMap[id] = idx; });
+      return [...notesList].sort((a, b) => {
+        const oa = orderMap[a._id] ?? a.order ?? 0;
+        const ob = orderMap[b._id] ?? b.order ?? 0;
+        return oa - ob;
+      });
+    };
+
+    const patchTopics = (topicsList) =>
+      topicsList.map(topic => {
+        // Patch orphan notes
+        if (containerType === 'orphan') {
+          return { ...topic, orphanNotes: applyOrder(topic.orphanNotes) };
+        }
+        return {
+          ...topic,
+          categories: topic.categories?.map(cat => {
+            if (containerType === 'category' && cat._id === containerId) {
+              return { ...cat, notes: applyOrder(cat.notes) };
+            }
+            if (containerType === 'group') {
+              const patchGroups = (groups) =>
+                groups?.map(g => {
+                  if (g._id === containerId) {
+                    return { ...g, notes: applyOrder(g.notes) };
+                  }
+                  return { ...g, subgroups: patchGroups(g.subgroups) };
+                });
+              return { ...cat, groups: patchGroups(cat.groups) };
+            }
+            return cat;
+          }),
+        };
+      });
+
+    // Apply optimistic update to both the ref and React state
+    topicsRef.current = patchTopics(topicsRef.current);
+    setTopics(prev => patchTopics(prev));
+
+    // Persist to backend (fire-and-forget — failures are non-critical)
+    try {
+      await noteService.reorderNotes(orderedIds);
+    } catch (error) {
+      console.error('Failed to persist note reorder:', error);
+      // On failure, re-fetch to restore server truth
+      await fetchAllNotes();
+    }
+
+    return { success: true };
+  }, [fetchAllNotes]);
+
   // Memoize the context value so consumers only re-render when the values
   // they actually care about change — not on every NoteProvider render.
   // All function references are stable (useCallback), so this object is only
@@ -384,6 +444,7 @@ export const NoteProvider = ({ children }) => {
     updateNote,
     deleteNote,
     moveNote,
+    reorderNotes,
   }), [
     topics,
     currentTopic,
@@ -394,7 +455,7 @@ export const NoteProvider = ({ children }) => {
     createTopic, updateTopic, deleteTopic,
     createCategory, updateCategory, deleteCategory,
     createGroup, updateGroup, deleteGroup,
-    createNote, updateNote, deleteNote, moveNote,
+    createNote, updateNote, deleteNote, moveNote, reorderNotes,
   ]);
 
   return <NoteContext.Provider value={value}>{children}</NoteContext.Provider>;

@@ -401,3 +401,39 @@ export const deleteNote = asyncHandler(async (req, res) => {
 
   res.status(200).json({ message: 'Note deleted successfully', id });
 });
+
+// --- REORDER NOTES ---
+// Body: { orderedIds: ["id1", "id2", ...] }
+// All IDs must belong to the same container (same categoryId+groupId combo or all orphans).
+// We simply assign order = index position, saving a bulk write.
+export const reorderNotes = asyncHandler(async (req, res) => {
+  const { orderedIds } = req.body;
+
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+    res.status(400);
+    throw new Error("orderedIds array is required");
+  }
+
+  // Verify all notes belong to this user (security check)
+  const notes = await SubTopic.find({ 
+    _id: { $in: orderedIds }, 
+    userId: req.user._id 
+  });
+
+  if (notes.length !== orderedIds.length) {
+    res.status(403);
+    throw new Error("One or more notes not found or unauthorized");
+  }
+
+  // Bulk update order values
+  const bulkOps = orderedIds.map((id, index) => ({
+    updateOne: {
+      filter: { _id: id, userId: req.user._id },
+      update: { $set: { order: index } }
+    }
+  }));
+
+  await SubTopic.bulkWrite(bulkOps);
+
+  res.status(200).json({ success: true, message: 'Notes reordered successfully' });
+});
