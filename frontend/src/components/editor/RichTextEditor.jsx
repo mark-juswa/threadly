@@ -301,18 +301,28 @@ const RichTextEditor = forwardRef((props, ref) => {
   };
 
   // Toggle highlight function for keyboard shortcut
-  const toggleHighlight = () => {
+  const toggleHighlight = (color = '#fde047') => {
     // Ensure styleWithCSS is enabled
     document.execCommand('styleWithCSS', false, true);
     
     const bgColor = document.queryCommandValue('backColor');
     
-    if (bgColor === 'rgb(250, 204, 21)' || bgColor === '#facc15') {
+    // Convert hex to rgb for comparison (queryCommandValue returns rgb)
+    const hexToRgb = (hex) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    
+    const rgbColor = hexToRgb(color);
+    
+    if (bgColor === rgbColor) {
       document.execCommand('hiliteColor', false, 'transparent');
       document.execCommand('foreColor', false, '#d1d5db');
     } else {
-      document.execCommand('hiliteColor', false, '#facc15');
-      document.execCommand('foreColor', false, 'black');
+      document.execCommand('hiliteColor', false, color);
+      document.execCommand('foreColor', false, '#111827'); // Dark text for better contrast on pastel
     }
   };
 

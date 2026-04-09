@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 const FloatingToolbar = () => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [visible, setVisible] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   // pinnedRef tracks whether the toolbar is pinned via Alt+` so that
   // it stays visible even when there is no active text selection.
   const pinnedRef = useRef(false);
@@ -45,6 +46,7 @@ const FloatingToolbar = () => {
 
         if (!selection.rangeCount || selection.isCollapsed) {
           setVisible(false);
+          setShowColorPicker(false);
           return;
         }
 
@@ -83,6 +85,7 @@ const FloatingToolbar = () => {
         // Unpin and hide
         pinnedRef.current = false;
         setVisible(false);
+        setShowColorPicker(false);
       } else {
         // Pin and show at current cursor position
         const pos = getPositionFromCursor();
@@ -164,19 +167,29 @@ const FloatingToolbar = () => {
     document.getElementById('editor')?.focus();
   };
 
-  const toggleHighlight = () => {
+  const toggleHighlight = (color = '#fde047') => {
     const savedRange = saveSelection();
     document.execCommand('styleWithCSS', false, true);
     restoreSelection(savedRange);
     
     const bgColor = document.queryCommandValue('backColor');
     
-    if (bgColor === 'rgb(250, 204, 21)' || bgColor === '#facc15') {
+    // Convert hex to rgb for comparison
+    const hexToRgb = (hex) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    
+    const rgbColor = hexToRgb(color);
+    
+    if (bgColor === rgbColor) {
       document.execCommand('hiliteColor', false, 'transparent');
       document.execCommand('foreColor', false, '#d1d5db');
     } else {
-      document.execCommand('hiliteColor', false, '#facc15');
-      document.execCommand('foreColor', false, 'black');
+      document.execCommand('hiliteColor', false, color);
+      document.execCommand('foreColor', false, '#111827');
     }
     document.getElementById('editor')?.focus();
   };
@@ -439,19 +452,72 @@ const FloatingToolbar = () => {
         <span className="font-serif font-bold text-red-500 text-lg">A</span>
       </button>
 
-      {/* Highlight */}
-      <button
-        onMouseDown={(e) => {
-          e.preventDefault();
-          toggleHighlight();
-        }}
-        className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-700 rounded transition"
-        title="Highlight"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-        </svg>
-      </button>
+      {/* Highlight Button */}
+      <div className="relative flex items-center">
+        <button
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setShowColorPicker(!showColorPicker);
+          }}
+          className={`p-1.5 rounded transition ${showColorPicker ? 'text-yellow-400 bg-gray-700' : 'text-gray-400 hover:text-yellow-400 hover:bg-gray-700'}`}
+          title="Highlight Palette"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+
+        {/* Color Palette Popup */}
+        {showColorPicker && (
+          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-[#1c1c1c] border border-gray-700 rounded-full shadow-xl flex items-center p-1 gap-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            {[
+              { name: 'Yellow', color: '#fde047' },
+              { name: 'Green', color: '#86efac' },
+              { name: 'Blue', color: '#93c5fd' },
+              { name: 'Purple', color: '#d8b4fe' },
+              { name: 'Rose', color: '#fda4af' }
+            ].map((c) => (
+              <button
+                key={c.color}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  toggleHighlight(c.color);
+                  setShowColorPicker(false);
+                }}
+                className="w-6 h-6 rounded-full border border-white/10 hover:scale-110 hover:border-white transition shadow-sm"
+                style={{ backgroundColor: c.color }}
+                title={c.name}
+              />
+            ))}
+            <button
+               onMouseDown={(e) => {
+                 e.preventDefault();
+                 toggleHighlight('#fde047'); // Default yellow for clear if it matches, but actually remove is better
+                 // We need a clear button
+               }}
+               className="hidden"
+            />
+             <div className="w-px h-4 bg-gray-700 mx-0.5" />
+             <button
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const savedRange = saveSelection();
+                  document.execCommand('styleWithCSS', false, true);
+                  restoreSelection(savedRange);
+                  document.execCommand('hiliteColor', false, 'transparent');
+                  document.execCommand('foreColor', false, '#d1d5db');
+                  setShowColorPicker(false);
+                }}
+                className="p-1 text-gray-400 hover:text-white transition"
+                title="Remove Highlight"
+             >
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+               </svg>
+             </button>
+          </div>
+        )}
+      </div>
 
       <div className="w-px h-5 bg-gray-700 mx-1.5" />
 
