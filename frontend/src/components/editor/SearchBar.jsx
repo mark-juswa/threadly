@@ -6,6 +6,50 @@ const SearchBar = () => {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
   const [showControls, setShowControls] = useState(false);
 
+  const highlightTextNodes = (element, regex) => {
+    const children = Array.from(element.childNodes);
+    children.forEach(node => {
+      if (node.nodeType === 3) { // Text node
+        const text = node.textContent;
+        // Reset regex lastIndex to ensure consistent matching
+        regex.lastIndex = 0;
+        
+        if (regex.test(text)) {
+          const fragment = document.createDocumentFragment();
+          let lastIndex = 0;
+          let match;
+          
+          // Use a fresh regex for the specific while loop since lastIndex matters
+          const searchRegex = new RegExp(regex);
+          
+          while ((match = searchRegex.exec(text)) !== null) {
+            // Add text before match
+            fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+            
+            // Add highlight span
+            const span = document.createElement('span');
+            span.className = 'search-highlight';
+            span.textContent = match[0];
+            fragment.appendChild(span);
+            
+            lastIndex = searchRegex.lastIndex;
+            // Handle zero-length matches (unlikely with our query regex but good practice)
+            if (match.index === searchRegex.lastIndex) searchRegex.lastIndex++;
+          }
+          
+          // Add remaining text
+          fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+          node.parentNode.replaceChild(fragment, node);
+        }
+      } else if (node.nodeType === 1 && 
+                 node.nodeName !== 'SCRIPT' && 
+                 node.nodeName !== 'STYLE' && 
+                 !node.classList.contains('search-highlight')) {
+        highlightTextNodes(node, regex);
+      }
+    });
+  };
+
   const performSearch = (searchQuery) => {
     const editor = document.getElementById('editor');
     if (!editor) return;
@@ -20,19 +64,20 @@ const SearchBar = () => {
       return;
     }
 
-    const content = editor.innerHTML;
-    const regex = new RegExp(`(${searchQuery})`, 'gi');
+    // Escape regex special characters to prevent crashes/errors
+    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedQuery, 'gi');
 
-    if (!content.match(regex)) {
+    // Use textContent for the initial match check to avoid HTML-related matches
+    if (!editor.textContent.match(regex)) {
       setShowControls(true);
       setMatches([]);
       setCurrentMatchIndex(-1);
       return;
     }
 
-    // Add highlights
-    const newContent = content.replace(regex, '<span class="search-highlight">$1</span>');
-    editor.innerHTML = newContent;
+    // Safe highlighting: only target text nodes, avoiding HTML tags and attributes
+    highlightTextNodes(editor, regex);
 
     const highlightElements = editor.querySelectorAll('.search-highlight');
     setMatches(Array.from(highlightElements));
