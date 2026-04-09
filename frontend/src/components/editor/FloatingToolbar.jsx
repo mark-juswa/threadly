@@ -204,8 +204,11 @@ const FloatingToolbar = () => {
     let transformedText;
     if (type === 'uppercase') {
       transformedText = selectedText.toUpperCase();
-    } else {
+    } else if (type === 'lowercase') {
       transformedText = selectedText.toLowerCase();
+    } else if (type === 'capitalize') {
+      // Capitalize first letter of each word and lowercase the rest
+      transformedText = selectedText.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
     }
 
     // Delete the selected content and insert transformed text
@@ -438,6 +441,18 @@ const FloatingToolbar = () => {
         title="Lowercase"
       >
         aa
+      </button>
+
+      {/* Capitalize Each Word */}
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          transformCase('capitalize');
+        }}
+        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition text-xs font-bold"
+        title="Capitalize Each Word"
+      >
+        Ab
       </button>
 
       {/* Text Color */}
