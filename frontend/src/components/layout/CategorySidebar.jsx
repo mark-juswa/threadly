@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import UserProfile from './UserProfile';
 
@@ -144,8 +144,33 @@ const GroupItem = ({
 const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onCreateCategory }) => {
   const { topics, currentTopic, currentNote, setCurrentCategory, setCurrentNote, moveNote, reorderNotes } = useNotes();
   const [searchQuery, setSearchQuery] = useState('');
-  const [collapsedCategories, setCollapsedCategories] = useState({});
-  const [collapsedGroups, setCollapsedGroups] = useState({});
+  const [collapsedCategories, setCollapsedCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('collapsed_categories');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      console.error('Failed to load collapsed categories', e);
+      return {};
+    }
+  });
+  const [collapsedGroups, setCollapsedGroups] = useState(() => {
+    try {
+      const saved = localStorage.getItem('collapsed_groups');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      console.error('Failed to load collapsed groups', e);
+      return {};
+    }
+  });
+
+  // Persist collapsed states to localStorage
+  useEffect(() => {
+    localStorage.setItem('collapsed_categories', JSON.stringify(collapsedCategories));
+  }, [collapsedCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('collapsed_groups', JSON.stringify(collapsedGroups));
+  }, [collapsedGroups]);
   const [draggedNote, setDraggedNote] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   // dragOverNote: { noteId, position: 'above'|'below' } — drives the drop indicator line

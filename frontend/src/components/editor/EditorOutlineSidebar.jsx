@@ -12,14 +12,27 @@ const EditorOutlineSidebar = ({ editorRef }) => {
   });
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeId, setActiveId] = useState(null);
-  const [collapsedSections, setCollapsedSections] = useState({
-    timestamps: false,
-    headings: false,
-    bulletLists: true,
-    numberedLists: true,
-    checklists: false,
-    highlights: true
+  const [collapsedSections, setCollapsedSections] = useState(() => {
+    try {
+      const saved = localStorage.getItem('collapsed_outline_sections');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to load collapsed outline sections', e);
+    }
+    return {
+      timestamps: false,
+      headings: false,
+      bulletLists: true,
+      numberedLists: true,
+      checklists: false,
+      highlights: true
+    };
   });
+
+  // Persist collapsed states to localStorage
+  useEffect(() => {
+    localStorage.setItem('collapsed_outline_sections', JSON.stringify(collapsedSections));
+  }, [collapsedSections]);
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({
