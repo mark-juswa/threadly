@@ -376,12 +376,25 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
   // Filter categories, groups, and notes based on search
   const searchLower = searchQuery.toLowerCase();
   
+  // Helper to strip HTML tags for plain text search
+  const stripHtml = (html) => {
+    if (!html) return '';
+    // Replace tags with space to avoid merging words, then trim
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
+  // Helper to check if a note matches the search query (title or content)
+  const noteMatches = (note) => {
+    if (!searchQuery) return true;
+    const titleMatch = note.title?.toLowerCase().includes(searchLower);
+    const contentMatch = stripHtml(note.content).toLowerCase().includes(searchLower);
+    return titleMatch || contentMatch;
+  };
+  
   // Recursive function to filter groups and their nested subgroups
   const filterGroup = (group) => {
     const groupMatches = group.name.toLowerCase().includes(searchLower);
-    const filteredGroupNotes = group.notes?.filter(note =>
-      note.title.toLowerCase().includes(searchLower)
-    ) || [];
+    const filteredGroupNotes = group.notes?.filter(noteMatches) || [];
     
     // Recursively filter subgroups
     const filteredSubgroups = group.subgroups?.map(filterGroup).filter(Boolean) || [];
@@ -402,9 +415,7 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
     const categoryMatches = category.name.toLowerCase().includes(searchLower);
     
     // Filter direct notes
-    const filteredNotes = category.notes?.filter(note =>
-      note.title.toLowerCase().includes(searchLower)
-    ) || [];
+    const filteredNotes = category.notes?.filter(noteMatches) || [];
     
     // Filter groups and their notes (including nested subgroups)
     const filteredGroups = category.groups?.map(filterGroup).filter(Boolean) || [];
@@ -428,9 +439,7 @@ const CategorySidebar = ({ showContextMenu, toggleMobileMenu, onCreateTopic, onC
     : (currentTopic?.categories || []);
 
   // Filter orphan notes based on search
-  const filteredOrphanNotes = currentTopic?.orphanNotes?.filter(note =>
-    !searchQuery || note.title.toLowerCase().includes(searchLower)
-  ) || [];
+  const filteredOrphanNotes = currentTopic?.orphanNotes?.filter(noteMatches) || [];
 
   return (
     <aside className="w-72 bg-black border-r border-[#222225] flex flex-col flex-shrink-0">
