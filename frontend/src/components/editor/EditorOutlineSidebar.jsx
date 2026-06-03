@@ -1,5 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNotes } from '../../hooks/useNotes';
+import AiReviewPanel from './AiReviewPanel';
+
+const SectionHeader = ({ section, icon, title, count, badge = null, onToggle, collapsed }) => (
+  <button
+    onClick={() => onToggle(section)}
+    className="w-full flex items-center gap-2 mb-2 text-xs text-gray-500 hover:text-gray-400 transition-colors"
+  >
+    <svg 
+      className={`w-3 h-3 transition-transform duration-200 ${collapsed ? '-rotate-90' : 'rotate-0'}`} 
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+    </svg>
+    {icon}
+    <span>{title}</span>
+    {badge}
+    <span className="ml-auto text-gray-600">{count}</span>
+  </button>
+);
 
 const EditorOutlineSidebar = ({ editorRef }) => {
   const { currentNote } = useNotes();
@@ -11,6 +32,7 @@ const EditorOutlineSidebar = ({ editorRef }) => {
     highlights: []
   });
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState('outline');
   const [activeId, setActiveId] = useState(null);
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try {
@@ -40,6 +62,21 @@ const EditorOutlineSidebar = ({ editorRef }) => {
       [section]: !prev[section]
     }));
   };
+
+  // Get icon for heading type
+  const getHeadingIcon = useCallback((type) => {
+    const baseClass = "font-bold text-xs";
+    switch (type) {
+      case 'h1':
+        return <span className={`${baseClass} text-gray-300`}>H1</span>;
+      case 'h2':
+        return <span className={`${baseClass} text-gray-400`}>H2</span>;
+      case 'h3':
+        return <span className={`${baseClass} text-gray-500`}>H3</span>;
+      default:
+        return null;
+    }
+  }, []);
 
   // Extract outline items from editor content
   const extractOutlineItems = useCallback(() => {
@@ -202,22 +239,7 @@ const EditorOutlineSidebar = ({ editorRef }) => {
     });
 
     return items;
-  }, [editorRef]);
-
-  // Get icon for heading type
-  const getHeadingIcon = (type) => {
-    const baseClass = "font-bold text-xs";
-    switch (type) {
-      case 'h1':
-        return <span className={`${baseClass} text-gray-300`}>H1</span>;
-      case 'h2':
-        return <span className={`${baseClass} text-gray-400`}>H2</span>;
-      case 'h3':
-        return <span className={`${baseClass} text-gray-500`}>H3</span>;
-      default:
-        return null;
-    }
-  };
+  }, [editorRef, getHeadingIcon]);
 
   // Get indent level for heading type
   const getIndentLevel = (type) => {
@@ -273,9 +295,9 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
   // Reset outline when note changes
   useEffect(() => {
-    setActiveId(null);
     // Small delay to allow editor content to load
     const timer = setTimeout(() => {
+      setActiveId(null);
       const items = extractOutlineItems();
       setOutlineItems(items);
     }, 100);
@@ -289,28 +311,6 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
   const { headings, bulletLists, numberedLists, checklists, highlights } = outlineItems;
   const completedChecklists = checklists.filter(item => item.checked).length;
-  const totalItems = headings.length + bulletLists.length + numberedLists.length + checklists.length + highlights.length;
-
-  // Collapsible Section Header Component
-  const SectionHeader = ({ section, icon, title, count, badge = null }) => (
-    <button
-      onClick={() => toggleSection(section)}
-      className="w-full flex items-center gap-2 mb-2 text-xs text-gray-500 hover:text-gray-400 transition-colors"
-    >
-      <svg 
-        className={`w-3 h-3 transition-transform duration-200 ${collapsedSections[section] ? '-rotate-90' : 'rotate-0'}`} 
-        fill="none" 
-        stroke="currentColor" 
-        viewBox="0 0 24 24"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-      </svg>
-      {icon}
-      <span>{title}</span>
-      {badge}
-      <span className="ml-auto text-gray-600">{count}</span>
-    </button>
-  );
 
   return (
     <aside 
@@ -322,7 +322,7 @@ const EditorOutlineSidebar = ({ editorRef }) => {
       <div className="flex items-center justify-between px-3 py-4 border-b border-gray-800/50">
         {!isCollapsed && (
           <h3 className="text-xs font-semibold tracking-wider text-gray-400 uppercase">
-            Page Outline
+            {activeTab === 'outline' ? 'Page Outline' : 'AI Review'}
           </h3>
         )}
         <button
@@ -341,14 +341,41 @@ const EditorOutlineSidebar = ({ editorRef }) => {
         </button>
       </div>
 
-      {/* Sidebar Content */}
       {!isCollapsed && (
+        <div className="flex border-b border-gray-800/50 p-1">
+          <button
+            onClick={() => setActiveTab('outline')}
+            className={`flex-1 rounded-md px-2 py-1.5 text-xs transition ${
+              activeTab === 'outline'
+                ? 'bg-gray-800 text-gray-200'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Outline
+          </button>
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={`flex-1 rounded-md px-2 py-1.5 text-xs transition ${
+              activeTab === 'ai'
+                ? 'bg-gray-800 text-gray-200'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            AI Review
+          </button>
+        </div>
+      )}
+
+      {/* Sidebar Content */}
+      {!isCollapsed && activeTab === 'outline' && (
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {/* Timestamps Section */}
           {currentNote && (
             <div className="px-3 py-3 border-b border-gray-800/30">
               <SectionHeader
                 section="timestamps"
+                onToggle={toggleSection}
+                collapsed={collapsedSections.timestamps}
                 icon={
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -378,9 +405,11 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
           {/* Headings Section */}
           <div className="px-3 py-3 border-b border-gray-800/30">
-            <SectionHeader
-              section="headings"
-              icon={
+              <SectionHeader
+                section="headings"
+                onToggle={toggleSection}
+                collapsed={collapsedSections.headings}
+                icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h8m-8 6h16" />
                 </svg>
@@ -417,9 +446,11 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
           {/* Bullet Lists Section */}
           <div className="px-3 py-3 border-b border-gray-800/30">
-            <SectionHeader
-              section="bulletLists"
-              icon={
+              <SectionHeader
+                section="bulletLists"
+                onToggle={toggleSection}
+                collapsed={collapsedSections.bulletLists}
+                icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                 </svg>
@@ -456,9 +487,11 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
           {/* Numbered Lists Section */}
           <div className="px-3 py-3 border-b border-gray-800/30">
-            <SectionHeader
-              section="numberedLists"
-              icon={
+              <SectionHeader
+                section="numberedLists"
+                onToggle={toggleSection}
+                collapsed={collapsedSections.numberedLists}
+                icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
                 </svg>
@@ -495,9 +528,11 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
           {/* Checklists Section */}
           <div className="px-3 py-3 border-b border-gray-800/30">
-            <SectionHeader
-              section="checklists"
-              icon={
+              <SectionHeader
+                section="checklists"
+                onToggle={toggleSection}
+                collapsed={collapsedSections.checklists}
+                icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -551,9 +586,11 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
           {/* Highlights Section */}
           <div className="px-3 py-3">
-            <SectionHeader
-              section="highlights"
-              icon={
+              <SectionHeader
+                section="highlights"
+                onToggle={toggleSection}
+                collapsed={collapsedSections.highlights}
+                icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
@@ -589,6 +626,12 @@ const EditorOutlineSidebar = ({ editorRef }) => {
               )
             )}
           </div>
+        </div>
+      )}
+
+      {!isCollapsed && activeTab === 'ai' && (
+        <div className="min-h-0 flex-1">
+          <AiReviewPanel />
         </div>
       )}
 

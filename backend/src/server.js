@@ -14,6 +14,7 @@ import noteRoutes from './routes/noteRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
 import { connectDB } from './config/db.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 import ratelimiter from './middleware/rateLimiter.js';
@@ -92,6 +93,7 @@ app.use('/api/auth', authRoutes); // OAuth routes
 app.use('/api/users', userRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/ai', aiRoutes);
 
 
 if (process.env.NODE_ENV === "production") {
