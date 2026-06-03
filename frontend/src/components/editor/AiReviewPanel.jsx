@@ -91,6 +91,11 @@ const AiResult = ({ response }) => {
           <span>{response.provider} / {response.model}</span>
           <span>{response.generatedAt ? new Date(response.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
         </div>
+        {response.fallbackFrom && (
+          <p className="mt-2 text-xs text-blue-300">
+            Used fallback after {response.fallbackFrom} failed.
+          </p>
+        )}
         {response.truncated && (
           <p className="mt-2 text-xs text-yellow-400">Result is based on truncated content.</p>
         )}

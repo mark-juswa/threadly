@@ -352,7 +352,9 @@ For category summary:
 
 ## 6. AI Provider Strategy
 
-Gemini is the v1 provider. Use `gemini-3-flash-preview` as the default model for fast note, group, and category review.
+Gemini is the v1 primary provider. Use `gemini-3-flash-preview` as the default model for fast note, group, and category review.
+
+Use Hugging Face Inference Providers as the optional free-tier fallback when Gemini times out or has a transient provider failure.
 
 The backend should still hide provider details behind `aiService` so the provider can be changed later.
 
@@ -366,8 +368,9 @@ generateCategorySummary({ category, groups, notes, context })
 
 Provider options:
 
-1. Use Gemini for v1.
-2. Keep the service provider-agnostic so the provider can be swapped later.
+1. Try Gemini first.
+2. If Gemini times out or returns a transient error, try Hugging Face when `HF_TOKEN` or `HF_API_KEY` is configured.
+3. Keep the service provider-agnostic so the provider can be swapped later.
 
 Required environment variables should be documented in backend `.env` usage:
 
@@ -377,6 +380,8 @@ OPENAI_API_KEY=...
 HF_API_KEY=...
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-3-flash-preview
+HF_TOKEN=...
+HF_MODEL=meta-llama/Llama-3.1-8B-Instruct:fastest
 ```
 
 If no provider key is configured, the backend should return a clear error:

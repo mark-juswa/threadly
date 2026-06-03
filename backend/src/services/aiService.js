@@ -1,4 +1,5 @@
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const HUGGING_FACE_API_BASE_URL = 'https://router.huggingface.co/v1';
 
 const getGeminiConfig = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -32,6 +33,15 @@ const extractJsonFromText = (text) => {
     }
     throw new Error('AI returned an invalid JSON response');
   }
+};
+
+const getHuggingFaceConfig = () => {
+  const apiKey = process.env.HF_TOKEN || process.env.HF_API_KEY;
+  const model = process.env.HF_MODEL || 'meta-llama/Llama-3.1-8B-Instruct:fastest';
+
+  if (!apiKey) return null;
+
+  return { apiKey, model };
 };
 
 const callGemini = async ({ systemInstruction, prompt }) => {
@@ -92,6 +102,99 @@ const callGemini = async ({ systemInstruction, prompt }) => {
     throw error;
   } finally {
     clearTimeout(timeout);
+  }
+};
+
+const callHuggingFace = async ({ systemInstruction, prompt }) => {
+  const config = getHuggingFaceConfig();
+  if (!config) {
+    const error = new Error('Hugging Face fallback is not configured. Set HF_TOKEN or HF_API_KEY.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+
+  try {
+    const response = await fetch(`${HUGGING_FACE_API_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message = data.error?.message || data.error || 'Hugging Face fallback request failed';
+      const error = new Error(message);
+      error.statusCode = response.status;
+      throw error;
+    }
+
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (!text) {
+      throw new Error('Hugging Face fallback returned an empty response');
+    }
+
+    return {
+      provider: 'huggingface',
+      model: config.model,
+      result: extractJsonFromText(text),
+    };
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error('Hugging Face fallback request timed out');
+      timeoutError.statusCode = 504;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const shouldTryFallback = (error) => {
+  const transientStatuses = new Set([408, 429, 500, 502, 503, 504]);
+  return error.name === 'AbortError' || transientStatuses.has(error.statusCode);
+};
+
+const callAI = async ({ systemInstruction, prompt }) => {
+  try {
+    return await callGemini({ systemInstruction, prompt });
+  } catch (geminiError) {
+    const hfConfig = getHuggingFaceConfig();
+
+    if (!hfConfig || !shouldTryFallback(geminiError)) {
+      throw geminiError;
+    }
+
+    console.warn(`Gemini failed (${geminiError.message}). Trying Hugging Face fallback.`);
+
+    try {
+      const fallbackResponse = await callHuggingFace({ systemInstruction, prompt });
+      return {
+        ...fallbackResponse,
+        fallbackFrom: 'gemini',
+        fallbackReason: geminiError.message,
+      };
+    } catch (fallbackError) {
+      fallbackError.message = `Gemini failed: ${geminiError.message}. Hugging Face fallback failed: ${fallbackError.message}`;
+      fallbackError.statusCode = fallbackError.statusCode || geminiError.statusCode;
+      throw fallbackError;
+    }
   }
 };
 
@@ -172,7 +275,7 @@ Return this JSON shape:
 }
 `;
 
-  return callGemini({ systemInstruction, prompt });
+  return callAI({ systemInstruction, prompt });
 };
 
 export const generateGroupSummary = async ({ context, group, notes, truncated }) => {
@@ -205,7 +308,7 @@ Return this JSON shape:
 }
 `;
 
-  return callGemini({ systemInstruction, prompt });
+  return callAI({ systemInstruction, prompt });
 };
 
 export const generateCategorySummary = async ({ context, category, groups, directNotes, groupedNotes, truncated }) => {
@@ -250,5 +353,5 @@ Return this JSON shape:
 }
 `;
 
-  return callGemini({ systemInstruction, prompt });
+  return callAI({ systemInstruction, prompt });
 };
