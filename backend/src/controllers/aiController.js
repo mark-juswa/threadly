@@ -3,7 +3,7 @@ import Topic from '../models/Topic.js';
 import Category from '../models/Category.js';
 import Group from '../models/Group.js';
 import SubTopic from '../models/SubTopic.js';
-import { htmlToPlainText, limitPlainText } from '../utils/htmlToPlainText.js';
+import { extractHtmlStructure, htmlToPlainText, limitPlainText } from '../utils/htmlToPlainText.js';
 import {
   generateNoteReview,
   generateGroupSummary,
@@ -44,6 +44,7 @@ const formatLimitedNote = (note, perNoteLimit) => {
     _id: note._id,
     title: note.title,
     content: limited.text,
+    structure: extractHtmlStructure(note.content),
     truncated: limited.truncated,
     updatedAt: note.updatedAt,
   };
@@ -68,6 +69,7 @@ const limitCollectionNotes = (notes, totalLimit) => {
       title: note.title,
       groupId: note.groupId,
       content: limited.text,
+      structure: extractHtmlStructure(note.content),
       truncated: limited.truncated || allowance < plain.length,
       updatedAt: note.updatedAt,
     };

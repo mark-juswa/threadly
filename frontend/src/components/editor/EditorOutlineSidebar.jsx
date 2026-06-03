@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import AiReviewPanel from './AiReviewPanel';
 
@@ -34,6 +34,15 @@ const EditorOutlineSidebar = ({ editorRef }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('outline');
   const [activeId, setActiveId] = useState(null);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem('editor_outline_width'));
+      return Number.isFinite(saved) && saved >= 240 && saved <= 520 ? saved : 288;
+    } catch {
+      return 288;
+    }
+  });
+  const resizeStateRef = useRef(null);
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try {
       const saved = localStorage.getItem('collapsed_outline_sections');
@@ -55,6 +64,48 @@ const EditorOutlineSidebar = ({ editorRef }) => {
   useEffect(() => {
     localStorage.setItem('collapsed_outline_sections', JSON.stringify(collapsedSections));
   }, [collapsedSections]);
+
+  useEffect(() => {
+    if (!isCollapsed) {
+      localStorage.setItem('editor_outline_width', String(sidebarWidth));
+    }
+  }, [sidebarWidth, isCollapsed]);
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState) return;
+
+      const delta = resizeState.startX - event.clientX;
+      const nextWidth = Math.min(520, Math.max(240, resizeState.startWidth + delta));
+      setSidebarWidth(nextWidth);
+    };
+
+    const handleMouseUp = () => {
+      resizeStateRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const startResize = (event) => {
+    if (isCollapsed) return;
+    event.preventDefault();
+    resizeStateRef.current = {
+      startX: event.clientX,
+      startWidth: sidebarWidth,
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({
@@ -314,10 +365,17 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
   return (
     <aside 
-      className={`editor-outline-sidebar h-full bg-[#151515] border-l border-gray-800/50 transition-all duration-300 ease-in-out flex flex-col ${
-        isCollapsed ? 'w-10' : 'w-64'
-      }`}
+      className="editor-outline-sidebar relative h-full bg-[#151515] border-l border-gray-800/50 transition-[width] duration-200 ease-in-out flex flex-col flex-shrink-0"
+      style={{ width: isCollapsed ? 40 : sidebarWidth }}
     >
+      {!isCollapsed && (
+        <div
+          onMouseDown={startResize}
+          className="absolute inset-y-0 left-0 z-10 w-1 cursor-col-resize bg-transparent transition hover:bg-green-500/40"
+          title="Resize sidebar"
+        />
+      )}
+
       {/* Sidebar Header */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-gray-800/50">
         {!isCollapsed && (
