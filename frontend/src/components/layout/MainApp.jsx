@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import TopicSidebar from './TopicSidebar';
 import CategorySidebar from './CategorySidebar';
 import Header from './Header';
@@ -13,6 +13,7 @@ import { useNotes } from '../../hooks/useNotes';
 
 const MainApp = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
   const editorRef = useRef(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createModalType, setCreateModalType] = useState('topic');
@@ -111,15 +112,57 @@ const MainApp = () => {
   // Fetch notes when app loads (user is authenticated at this point)
   useEffect(() => {
     fetchAllNotes();
-  }, []);
+  }, [fetchAllNotes]);
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
+  const toggleRightSidebar = () => {
+    setIsRightSidebarOpen(prev => !prev);
+  };
+
+  const closeRightSidebar = () => {
+    setIsRightSidebarOpen(false);
+  };
+
   const handleGlobalClick = () => {
     hideContextMenu();
   };
+
+  useEffect(() => {
+    const shouldLockScroll = isMobileMenuOpen || isRightSidebarOpen;
+    document.body.style.overflow = shouldLockScroll ? 'hidden' : '';
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileMenuOpen, isRightSidebarOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsRightSidebarOpen(false);
+      }
+    };
+
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+        setIsRightSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
 
   return (
     <div 
@@ -151,16 +194,28 @@ const MainApp = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 bg-[#151515] flex flex-col relative min-w-0">
-        <Header toggleMobileMenu={toggleMobileMenu} />
+        <Header toggleMobileMenu={toggleMobileMenu} toggleRightSidebar={toggleRightSidebar} />
         
         <div className="relative flex-1 flex overflow-hidden">
           {/* Editor Area */}
           <div className="flex-1 relative overflow-hidden">
             <RichTextEditor ref={editorRef} />
           </div>
+          {/* Right Sidebar Mobile Backdrop */}
+          {isRightSidebarOpen && (
+            <div
+              className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden"
+              onClick={closeRightSidebar}
+            />
+          )}
+          
           
           {/* Right Contextual Sidebar - Page Outline */}
-          <EditorOutlineSidebar editorRef={editorRef} />
+          <EditorOutlineSidebar
+            editorRef={editorRef}
+            isMobileOpen={isRightSidebarOpen}
+            onMobileClose={closeRightSidebar}
+          />
         </div>
 
         <FloatingToolbar />
@@ -206,3 +261,4 @@ const MainApp = () => {
 };
 
 export default MainApp;
+

@@ -1,4 +1,4 @@
-# NotebookLM-Style AI Review Panel - Feature Plan
+﻿# NotebookLM-Style AI Review Panel - Feature Plan
 
 > **Status:** Planning  
 > **Target Feature:** AI-powered review, summary, and study panel for notes, groups, and categories  
@@ -352,9 +352,7 @@ For category summary:
 
 ## 6. AI Provider Strategy
 
-Gemini is the v1 primary provider. Use `gemini-3-flash-preview` as the default model for fast note, group, and category review.
-
-Use Hugging Face Inference Providers as the optional free-tier fallback when Gemini times out or has a transient provider failure.
+Hugging Face Inference Providers running Gemma is the v1 primary provider. Use `google/gemma-2-2b-it` by default because it is instruction-tuned, relatively small, and practical without local GPU hardware. Gemini remains an optional fallback only when configured.
 
 The backend should still hide provider details behind `aiService` so the provider can be changed later.
 
@@ -368,9 +366,9 @@ generateCategorySummary({ category, groups, notes, context })
 
 Provider options:
 
-1. Try Gemini first.
-2. If Gemini times out or returns a transient error, try Hugging Face when `HF_TOKEN` or `HF_API_KEY` is configured.
-3. Keep the service provider-agnostic so the provider can be swapped later.
+1. Try Hugging Face Gemma first.
+2. If Gemma times out, is loading, is unavailable, or returns malformed output, try Gemini only when it is configured and listed in AI_PROVIDER_ORDER.
+3. Keep provider order and model IDs configurable so the model can be changed without touching route/controller code.
 
 Required environment variables should be documented in backend `.env` usage:
 
@@ -378,10 +376,11 @@ Required environment variables should be documented in backend `.env` usage:
 AI_PROVIDER=openai|huggingface
 OPENAI_API_KEY=...
 HF_API_KEY=...
+AI_PROVIDER_ORDER=huggingface,gemini
+HF_TOKEN=...
+HF_MODEL=google/gemma-2-2b-it
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-3-flash-preview
-HF_TOKEN=...
-HF_MODEL=meta-llama/Llama-3.1-8B-Instruct:fastest
 ```
 
 If no provider key is configured, the backend should return a clear error:
@@ -783,3 +782,5 @@ Keep it as a structured AI Review tab in the right sidebar.
 Do not start with open-ended chat. Add chat only after the structured summaries are reliable.
 
 The goal is to make the app explain the user's own material at note, group, and category levels, so users can understand, review, and study their contents more effectively.
+
+

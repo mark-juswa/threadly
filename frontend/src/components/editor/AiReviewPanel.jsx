@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+﻿import { useMemo } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import { useAIReview } from '../../hooks/useAIReview';
 
@@ -64,15 +64,45 @@ const ListBlock = ({ values }) => {
   );
 };
 
-const ObjectListBlock = ({ values, titleKey, bodyKey }) => {
+const ObjectCardList = ({ values, titleKey, bodyKeys = [] }) => {
+  if (!Array.isArray(values) || values.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      {values.map((item, index) => {
+        const title = item?.[titleKey] || `Item ${index + 1}`;
+        const details = bodyKeys
+          .map((key) => ({ key, value: item?.[key] }))
+          .filter((detail) => detail.value);
+
+        return (
+          <div key={`${title}-${index}`} className="rounded-md border border-gray-800 bg-[#101010] p-3">
+            <h5 className="mb-1 text-sm font-medium text-gray-200">{title}</h5>
+            <div className="space-y-1">
+              {details.map((detail) => (
+                <p key={detail.key} className="text-xs leading-relaxed text-gray-400">
+                  {detail.value}
+                </p>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const HighlightList = ({ values }) => {
   if (!Array.isArray(values) || values.length === 0) return null;
 
   return (
     <div className="space-y-3">
       {values.map((item, index) => (
-        <div key={`${item?.[titleKey] || index}-${index}`} className="rounded-md border border-gray-800 bg-[#101010] p-3">
-          <h5 className="mb-1 text-sm font-medium text-gray-200">{item?.[titleKey] || `Item ${index + 1}`}</h5>
-          <p className="text-xs leading-relaxed text-gray-400">{item?.[bodyKey] || ''}</p>
+        <div key={`${item?.text || index}-${index}`} className="rounded-md border border-yellow-500/20 bg-yellow-500/5 p-3">
+          <p className="mb-2 text-sm leading-relaxed text-yellow-100">"{item?.text}"</p>
+          {item?.reason && (
+            <p className="text-xs leading-relaxed text-yellow-300/80">{item.reason}</p>
+          )}
         </div>
       ))}
     </div>
@@ -105,7 +135,7 @@ const AiResult = ({ response }) => {
         <TextBlock value={result.overview} />
       </Section>
 
-      <Section title="Summary">
+      <Section title="Study Summary">
         <TextBlock value={result.summary} />
       </Section>
 
@@ -113,8 +143,21 @@ const AiResult = ({ response }) => {
         <ListBlock values={result.keyPoints} />
       </Section>
 
-      <Section title="Important Terms">
-        <ListBlock values={result.importantTerms} />
+      <Section title="Important Terms and Definitions">
+        <ObjectCardList values={result.importantTerms} titleKey="term" bodyKeys={["definition"]} />
+      </Section>
+
+      <Section title="Supporting Details and Examples">
+        <ObjectCardList values={result.supportingDetails} titleKey="detail" bodyKeys={["supports"]} />
+        <ListBlock values={result.examples} />
+      </Section>
+
+      <Section title="Key Takeaways">
+        <ListBlock values={result.keyTakeaways} />
+      </Section>
+
+      <Section title="Highlighted Passages">
+        <HighlightList values={result.highlightedPassages} />
       </Section>
 
       <Section title="Major Subtopics">
@@ -122,11 +165,11 @@ const AiResult = ({ response }) => {
       </Section>
 
       <Section title="Note Breakdown">
-        <ObjectListBlock values={result.noteBreakdown} titleKey="title" bodyKey="contribution" />
+        <ObjectCardList values={result.noteBreakdown} titleKey="title" bodyKeys={["contribution"]} />
       </Section>
 
       <Section title="Group Breakdown">
-        <ObjectListBlock values={result.groupBreakdown} titleKey="groupName" bodyKey="summary" />
+        <ObjectCardList values={result.groupBreakdown} titleKey="groupName" bodyKeys={["summary"]} />
       </Section>
 
       <Section title="Connections">
@@ -141,7 +184,7 @@ const AiResult = ({ response }) => {
         <ListBlock values={result.reviewQuestions} />
       </Section>
 
-      <Section title="Gaps">
+      <Section title="Gaps or Unclear Areas">
         <ListBlock values={result.gaps} />
       </Section>
     </div>
@@ -180,7 +223,7 @@ const AiReviewPanel = () => {
       <div className="border-b border-gray-800/30 px-3 py-3">
         <h3 className="mb-1 text-xs font-semibold tracking-wider text-gray-400 uppercase">AI Review</h3>
         <p className="text-xs leading-relaxed text-gray-600">
-          Grounded summaries for the selected note and its hierarchy.
+          Learning-focused summaries based only on your saved notes.
         </p>
       </div>
 
@@ -191,7 +234,7 @@ const AiReviewPanel = () => {
           className="w-full rounded-md border border-gray-800 bg-[#101010] px-3 py-2 text-left text-sm text-gray-300 transition hover:border-green-500/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           Review Note
-          <span className="block text-xs text-gray-600">Summary, key points, gaps, and questions</span>
+          <span className="block text-xs text-gray-600">Concepts, definitions, highlights, takeaways, questions</span>
         </button>
 
         <button
@@ -236,7 +279,7 @@ const AiReviewPanel = () => {
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {!loading && !response && !error && (
           <div className="px-3 py-4 text-sm leading-relaxed text-gray-600">
-            Choose a review action. AI output will be based only on your saved notes.
+            Choose a review action. AI output will prioritize what is useful for studying and review.
           </div>
         )}
         <AiResult response={response} />

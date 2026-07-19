@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import AiReviewPanel from './AiReviewPanel';
 
@@ -22,7 +22,7 @@ const SectionHeader = ({ section, icon, title, count, badge = null, onToggle, co
   </button>
 );
 
-const EditorOutlineSidebar = ({ editorRef }) => {
+const EditorOutlineSidebar = ({ editorRef, isMobileOpen = false, onMobileClose }) => {
   const { currentNote } = useNotes();
   const [outlineItems, setOutlineItems] = useState({
     headings: [],
@@ -365,13 +365,13 @@ const EditorOutlineSidebar = ({ editorRef }) => {
 
   return (
     <aside 
-      className="editor-outline-sidebar relative h-full bg-[#151515] border-l border-gray-800/50 transition-[width] duration-200 ease-in-out flex flex-col flex-shrink-0"
-      style={{ width: isCollapsed ? 40 : sidebarWidth }}
+      className={`editor-outline-sidebar fixed inset-y-0 right-0 z-50 h-full max-w-[90vw] bg-[#151515] border-l border-gray-800/50 transition-[width,transform] duration-200 ease-in-out flex flex-col flex-shrink-0 md:relative md:z-auto md:max-w-none ${isMobileOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}
+      style={{ width: isCollapsed && !isMobileOpen ? 40 : sidebarWidth }}
     >
       {!isCollapsed && (
         <div
           onMouseDown={startResize}
-          className="absolute inset-y-0 left-0 z-10 w-1 cursor-col-resize bg-transparent transition hover:bg-green-500/40"
+          className="absolute inset-y-0 left-0 z-10 hidden w-1 cursor-col-resize bg-transparent transition hover:bg-green-500/40 md:block"
           title="Resize sidebar"
         />
       )}
@@ -384,8 +384,18 @@ const EditorOutlineSidebar = ({ editorRef }) => {
           </h3>
         )}
         <button
+          onClick={onMobileClose}
+          className="p-1 text-gray-500 transition-colors rounded hover:text-gray-300 hover:bg-gray-800/50 md:hidden"
+          title="Close sidebar"
+          aria-label="Close sidebar"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 text-gray-500 transition-colors rounded hover:text-gray-300 hover:bg-gray-800/50"
+          className="hidden p-1 text-gray-500 transition-colors rounded hover:text-gray-300 hover:bg-gray-800/50 md:block"
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <svg 
@@ -774,3 +784,6 @@ const formatDate = (dateString) => {
 };
 
 export default EditorOutlineSidebar;
+
+
+
