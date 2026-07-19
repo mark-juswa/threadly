@@ -262,7 +262,7 @@ body {
 }
 
 /* Responsive: Hide sidebar on small screens */
-@media (max-width: 1024px) {
+@media (min-width: 768px) and (max-width: 1024px) {
   .editor-outline-sidebar {
     display: none;
   }
