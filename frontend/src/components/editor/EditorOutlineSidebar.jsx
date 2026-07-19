@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNotes } from '../../hooks/useNotes';
 import AiReviewPanel from './AiReviewPanel';
 
@@ -365,7 +365,7 @@ const EditorOutlineSidebar = ({ editorRef, isMobileOpen = false, onMobileClose }
 
   return (
     <aside 
-      className={`editor-outline-sidebar fixed inset-y-0 right-0 z-50 h-full max-w-[90vw] bg-[#151515] border-l border-gray-800/50 transition-[width,transform] duration-200 ease-in-out flex flex-col flex-shrink-0 md:relative md:z-auto md:max-w-none ${isMobileOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}
+      className={`editor-outline-sidebar fixed inset-y-0 right-0 z-[70] h-[100dvh] max-w-[92vw] bg-[#151515] border-l border-gray-800/50 shadow-2xl transition-[width,transform] duration-200 ease-in-out flex flex-col flex-shrink-0 md:relative md:z-auto md:h-full md:max-w-none md:shadow-none ${isMobileOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}
       style={{ width: isCollapsed && !isMobileOpen ? 40 : sidebarWidth }}
     >
       {!isCollapsed && (
@@ -784,6 +784,4 @@ const formatDate = (dateString) => {
 };
 
 export default EditorOutlineSidebar;
-
-
 

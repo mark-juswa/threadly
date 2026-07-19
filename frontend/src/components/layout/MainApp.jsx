@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import TopicSidebar from './TopicSidebar';
 import CategorySidebar from './CategorySidebar';
 import Header from './Header';
@@ -204,7 +204,7 @@ const MainApp = () => {
           {/* Right Sidebar Mobile Backdrop */}
           {isRightSidebarOpen && (
             <div
-              className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden"
+              className="fixed inset-0 z-[55] bg-black/70 backdrop-blur-sm md:hidden"
               onClick={closeRightSidebar}
             />
           )}
